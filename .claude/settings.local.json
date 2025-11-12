@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo install:*)",
+      "Bash(npx expo --version)",
+      "Bash(npm install:*)",
+      "Bash(nul)",
+      "WebSearch",
+      "Bash(npx tsc:*)",
+      "Bash(dir:*)",
+      "WebFetch(domain:docs.perplexity.ai)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:docs.swmansion.com)",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__list_tables",
+      "Bash(cat:*)",
+      "Bash(findstr:*)",
+      "Bash(test:*)",
+      "mcp__ide__getDiagnostics"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
+}
