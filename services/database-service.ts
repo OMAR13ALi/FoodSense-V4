@@ -242,6 +242,114 @@ export async function getAllMealDates(): Promise<string[]> {
   }
 }
 
+/**
+ * Load meals for a date range
+ */
+export async function loadMealsForDateRange(startDate: Date, endDate: Date): Promise<MealEntry[]> {
+  const userId = await getCurrentUserId();
+
+  try {
+    const { data, error } = await supabase
+      .from('meals')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('timestamp', startDate.toISOString())
+      .lte('timestamp', endDate.toISOString())
+      .order('timestamp', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map(mealFromDbFormat);
+  } catch (error: any) {
+    console.error('Failed to load meals for date range:', error);
+    throw new Error(`Failed to load meals for date range: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get daily summaries for a date range
+ * Returns aggregated nutrition data grouped by date
+ */
+export async function getDailySummaries(startDate: Date, endDate: Date): Promise<Array<{
+  date: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  mealCount: number;
+}>> {
+  const userId = await getCurrentUserId();
+
+  try {
+    const { data, error } = await supabase
+      .from('meals')
+      .select('timestamp, calories, protein, carbs, fat')
+      .eq('user_id', userId)
+      .gte('timestamp', startDate.toISOString())
+      .lte('timestamp', endDate.toISOString())
+      .order('timestamp', { ascending: true });
+
+    if (error) throw error;
+
+    // Group meals by date and calculate totals
+    const summariesMap = new Map<string, {
+      totalCalories: number;
+      totalProtein: number;
+      totalCarbs: number;
+      totalFat: number;
+      mealCount: number;
+    }>();
+
+    (data || []).forEach((meal) => {
+      const date = formatDateKey(new Date(meal.timestamp));
+      const existing = summariesMap.get(date) || {
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        mealCount: 0,
+      };
+
+      summariesMap.set(date, {
+        totalCalories: existing.totalCalories + Number(meal.calories),
+        totalProtein: existing.totalProtein + (meal.protein ? Number(meal.protein) : 0),
+        totalCarbs: existing.totalCarbs + (meal.carbs ? Number(meal.carbs) : 0),
+        totalFat: existing.totalFat + (meal.fat ? Number(meal.fat) : 0),
+        mealCount: existing.mealCount + 1,
+      });
+    });
+
+    // Convert map to array
+    return Array.from(summariesMap.entries()).map(([date, stats]) => ({
+      date,
+      ...stats,
+    }));
+  } catch (error: any) {
+    console.error('Failed to get daily summaries:', error);
+    throw new Error(`Failed to get daily summaries: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get last N days of daily summaries
+ */
+export async function getRecentDailySummaries(days: number = 7): Promise<Array<{
+  date: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  mealCount: number;
+}>> {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days + 1);
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  return getDailySummaries(startDate, endDate);
+}
+
 // =====================================================
 // SETTINGS OPERATIONS
 // =====================================================

@@ -3,9 +3,10 @@
  */
 
 import React, { createContext, useContext, useReducer, useMemo, ReactNode, useEffect } from 'react';
-import { AppState, AppAction, MealEntry, UserSettings } from '@/types';
+import { AppState, AppAction, MealEntry, UserSettings, FavoriteMeal } from '@/types';
 import { DEFAULT_SETTINGS } from '@/constants/mockData';
 import * as StorageService from '@/services/storage-service';
+import * as FavoritesService from '@/services/favorites-service';
 import { generateUUID } from '@/services/device-id-service';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -26,6 +27,7 @@ const calculateTotals = (meals: MealEntry[]) => {
 const initialState: AppState = {
   meals: [],
   settings: DEFAULT_SETTINGS,
+  favorites: [],
   totalCalories: 0,
   totalProtein: 0,
   totalCarbs: 0,
@@ -92,6 +94,38 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
       };
     }
 
+    case 'SET_FAVORITES': {
+      return {
+        ...state,
+        favorites: action.payload,
+      };
+    }
+
+    case 'ADD_FAVORITE': {
+      return {
+        ...state,
+        favorites: [...state.favorites, action.payload],
+      };
+    }
+
+    case 'UPDATE_FAVORITE': {
+      const updatedFavorites = state.favorites.map((fav) =>
+        fav.id === action.payload.id ? { ...fav, ...action.payload.updates } : fav
+      );
+      return {
+        ...state,
+        favorites: updatedFavorites,
+      };
+    }
+
+    case 'DELETE_FAVORITE': {
+      const filteredFavorites = state.favorites.filter((fav) => fav.id !== action.payload);
+      return {
+        ...state,
+        favorites: filteredFavorites,
+      };
+    }
+
     default:
       return state;
   }
@@ -107,6 +141,11 @@ interface AppContextType {
   updateSettings: (settings: Partial<UserSettings>) => void;
   clearMeals: () => void;
   getRemainingCalories: () => number;
+  // Favorite meals functions
+  addFavorite: (favorite: Omit<FavoriteMeal, 'id' | 'user_id' | 'frequency_count' | 'created_at' | 'updated_at' | 'last_used_at'>) => Promise<void>;
+  deleteFavoriteById: (id: string) => Promise<void>;
+  addMealFromFavorite: (favoriteId: string) => Promise<void>;
+  refreshFavorites: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
   clearError: () => void;
@@ -149,6 +188,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const savedSettings = await StorageService.loadSettings();
         const settings = savedSettings || DEFAULT_SETTINGS;
 
+        // Load favorites
+        const favorites = await FavoritesService.getFavorites();
+
         // Dispatch loaded data
         if (savedSettings) {
           dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
@@ -158,6 +200,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         meals.forEach(meal => {
           dispatch({ type: 'ADD_MEAL', payload: meal });
         });
+
+        // Load favorites
+        dispatch({ type: 'SET_FAVORITES', payload: favorites });
 
         setIsInitialized(true);
         setIsLoading(false);
@@ -237,6 +282,68 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
 
+  // Favorite meals helper functions
+  const addFavorite = async (favorite: Omit<FavoriteMeal, 'id' | 'user_id' | 'frequency_count' | 'created_at' | 'updated_at' | 'last_used_at'>) => {
+    try {
+      const newFavorite = await FavoritesService.addFavorite(favorite);
+      dispatch({ type: 'ADD_FAVORITE', payload: newFavorite });
+    } catch (error: any) {
+      console.error('Error adding favorite:', error);
+      setError(error?.message || 'Failed to add favorite');
+      throw error;
+    }
+  };
+
+  const deleteFavoriteById = async (id: string) => {
+    try {
+      await FavoritesService.deleteFavorite(id);
+      dispatch({ type: 'DELETE_FAVORITE', payload: id });
+    } catch (error: any) {
+      console.error('Error deleting favorite:', error);
+      setError(error?.message || 'Failed to delete favorite');
+      throw error;
+    }
+  };
+
+  const addMealFromFavorite = async (favoriteId: string) => {
+    try {
+      const favorite = state.favorites.find(f => f.id === favoriteId);
+      if (!favorite) {
+        throw new Error('Favorite not found');
+      }
+
+      // Add meal from favorite
+      addMeal({
+        text: favorite.name,
+        calories: favorite.calories,
+        protein: favorite.protein,
+        carbs: favorite.carbs,
+        fat: favorite.fat,
+      });
+
+      // Increment usage count
+      await FavoritesService.incrementFavoriteUsage(favoriteId);
+
+      // Refresh favorites to get updated counts
+      await refreshFavorites();
+    } catch (error: any) {
+      console.error('Error adding meal from favorite:', error);
+      setError(error?.message || 'Failed to add meal from favorite');
+      throw error;
+    }
+  };
+
+  const refreshFavorites = async () => {
+    try {
+      const favorites = await FavoritesService.getFavorites();
+      dispatch({ type: 'SET_FAVORITES', payload: favorites });
+    } catch (error: any) {
+      console.error('Error refreshing favorites:', error);
+      setError(error?.message || 'Failed to refresh favorites');
+      throw error;
+    }
+  };
+
   const contextValue = useMemo(
     () => ({
       state,
@@ -247,6 +354,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       updateSettings,
       clearMeals,
       getRemainingCalories,
+      addFavorite,
+      deleteFavoriteById,
+      addMealFromFavorite,
+      refreshFavorites,
       isLoading,
       error,
       clearError,

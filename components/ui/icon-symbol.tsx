@@ -19,6 +19,7 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
   
   // Settings
   'gearshape.fill': 'settings',
@@ -31,9 +32,13 @@ const MAPPING = {
   // Stats tab (chart icons)
   'chart.pie.fill': 'pie-chart',
   'chart.bar.fill': 'bar-chart',
+  'chart.line.uptrend.xyaxis': 'trending-up',
   
   // History tab (calendar icon)
   'calendar': 'calendar-today',
+  
+  // Additional icons
+  'star.fill': 'star',
 } as IconMapping;
 
 /**

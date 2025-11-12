@@ -34,6 +34,7 @@ export interface UserSettings {
 export interface AppState {
   meals: MealEntry[];
   settings: UserSettings;
+  favorites: FavoriteMeal[];
   totalCalories: number;
   totalProtein: number;
   totalCarbs: number;
@@ -47,7 +48,11 @@ export type AppAction =
   | { type: 'DELETE_MEAL'; payload: string }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<UserSettings> }
   | { type: 'CLEAR_MEALS' }
-  | { type: 'SET_LOADING'; payload: { id: string; isLoading: boolean } };
+  | { type: 'SET_LOADING'; payload: { id: string; isLoading: boolean } }
+  | { type: 'SET_FAVORITES'; payload: FavoriteMeal[] }
+  | { type: 'ADD_FAVORITE'; payload: FavoriteMeal }
+  | { type: 'UPDATE_FAVORITE'; payload: { id: string; updates: Partial<FavoriteMeal> } }
+  | { type: 'DELETE_FAVORITE'; payload: string };
 
 // Macro nutrient type
 export interface MacroNutrient {

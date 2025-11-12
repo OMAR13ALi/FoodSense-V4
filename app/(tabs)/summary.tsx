@@ -129,37 +129,102 @@ export default function SummaryScreen() {
           })}
         </Text>
 
-        {/* Circular Progress */}
-        <View style={styles.progressContainer}>
-          <CircularProgress
-            consumed={state.totalCalories}
-            goal={state.settings.dailyCalorieGoal}
-            size={240}
-            strokeWidth={20}
-          />
-        </View>
+        {/* Quick Stats Dashboard */}
+        <View style={styles.quickStatsContainer}>
+          {/* Calories Card - Main Focus */}
+          <View style={[styles.mainStatCard, { backgroundColor: colors.primary }]}>
+            <View style={styles.mainStatHeader}>
+              <Text style={styles.mainStatLabel}>Calories Today</Text>
+              <Text style={styles.mainStatEmoji}>🔥</Text>
+            </View>
+            <Text style={styles.mainStatValue}>
+              {state.totalCalories.toLocaleString()}
+            </Text>
+            <Text style={styles.mainStatSubtext}>
+              of {state.settings.dailyCalorieGoal.toLocaleString()} goal
+            </Text>
+            <View style={styles.mainStatProgressBar}>
+              <View
+                style={[
+                  styles.mainStatProgressFill,
+                  {
+                    width: `${Math.min((state.totalCalories / state.settings.dailyCalorieGoal) * 100, 100)}%`,
+                  },
+                ]}
+              />
+            </View>
+          </View>
 
-        {/* Remaining Calories */}
-        <View style={[styles.remainingCard, { backgroundColor: colors.cardBackground }]}>
-          <Text style={[styles.remainingLabel, { color: colors.textSecondary }]}>
-            {state.totalCalories > state.settings.dailyCalorieGoal ? 'Over Goal' : 'Remaining'}
-          </Text>
-          <Text
-            style={[
-              styles.remainingValue,
-              {
-                color:
-                  state.totalCalories > state.settings.dailyCalorieGoal
-                    ? colors.caloriePositive
-                    : colors.success,
-              },
-            ]}
-          >
-            {state.totalCalories > state.settings.dailyCalorieGoal
-              ? `+${(state.totalCalories - state.settings.dailyCalorieGoal).toLocaleString()}`
-              : (state.settings.dailyCalorieGoal - state.totalCalories).toLocaleString()}{' '}
-            cal
-          </Text>
+          {/* Quick Stats Grid */}
+          <View style={styles.quickStatsGrid}>
+            {/* Protein */}
+            <View style={[styles.quickStatCard, { backgroundColor: colors.cardBackground }]}>
+              <Text style={styles.quickStatEmoji}>💪</Text>
+              <Text style={[styles.quickStatValue, { color: colors.text }]}>
+                {Math.round(state.totalProtein)}g
+              </Text>
+              <Text style={[styles.quickStatLabel, { color: colors.textSecondary }]}>
+                Protein
+              </Text>
+              <View style={[styles.quickStatBar, { backgroundColor: colors.border }]}>
+                <View
+                  style={[
+                    styles.quickStatBarFill,
+                    { backgroundColor: '#6C9BD1', width: `${Math.min((state.totalProtein / state.settings.targetProtein) * 100, 100)}%` },
+                  ]}
+                />
+              </View>
+            </View>
+
+            {/* Carbs */}
+            <View style={[styles.quickStatCard, { backgroundColor: colors.cardBackground }]}>
+              <Text style={styles.quickStatEmoji}>🍞</Text>
+              <Text style={[styles.quickStatValue, { color: colors.text }]}>
+                {Math.round(state.totalCarbs)}g
+              </Text>
+              <Text style={[styles.quickStatLabel, { color: colors.textSecondary }]}>
+                Carbs
+              </Text>
+              <View style={[styles.quickStatBar, { backgroundColor: colors.border }]}>
+                <View
+                  style={[
+                    styles.quickStatBarFill,
+                    { backgroundColor: '#FFA07A', width: `${Math.min((state.totalCarbs / state.settings.targetCarbs) * 100, 100)}%` },
+                  ]}
+                />
+              </View>
+            </View>
+
+            {/* Fat */}
+            <View style={[styles.quickStatCard, { backgroundColor: colors.cardBackground }]}>
+              <Text style={styles.quickStatEmoji}>🥑</Text>
+              <Text style={[styles.quickStatValue, { color: colors.text }]}>
+                {Math.round(state.totalFat)}g
+              </Text>
+              <Text style={[styles.quickStatLabel, { color: colors.textSecondary }]}>
+                Fat
+              </Text>
+              <View style={[styles.quickStatBar, { backgroundColor: colors.border }]}>
+                <View
+                  style={[
+                    styles.quickStatBarFill,
+                    { backgroundColor: '#98D8AA', width: `${Math.min((state.totalFat / state.settings.targetFat) * 100, 100)}%` },
+                  ]}
+                />
+              </View>
+            </View>
+
+            {/* Meals Count */}
+            <View style={[styles.quickStatCard, { backgroundColor: colors.cardBackground }]}>
+              <Text style={styles.quickStatEmoji}>🍽️</Text>
+              <Text style={[styles.quickStatValue, { color: colors.text }]}>
+                {state.meals.length}
+              </Text>
+              <Text style={[styles.quickStatLabel, { color: colors.textSecondary }]}>
+                Meals
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Macro Breakdown */}
@@ -360,5 +425,102 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  // Quick Stats Widget Styles
+  quickStatsContainer: {
+    marginBottom: 32,
+  },
+  mainStatCard: {
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  mainStatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  mainStatLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    opacity: 0.9,
+  },
+  mainStatEmoji: {
+    fontSize: 28,
+  },
+  mainStatValue: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+    marginBottom: 4,
+  },
+  mainStatSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginBottom: 16,
+  },
+  mainStatProgressBar: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  mainStatProgressFill: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 3,
+  },
+  quickStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  quickStatCard: {
+    flex: 1,
+    minWidth: '47%',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  quickStatEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  quickStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  quickStatLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  quickStatBar: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  quickStatBarFill: {
+    height: '100%',
+    borderRadius: 2,
   },
 });

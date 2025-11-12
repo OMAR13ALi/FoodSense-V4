@@ -58,9 +58,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="progress"
         options={{
-          href: null, // Hide from tab bar
+          title: 'Progress',
+          tabBarIcon: ({ color }) => <IconSymbol size={32} name="chart.line.uptrend.xyaxis" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -68,6 +69,18 @@ export default function TabLayout() {
         options={{
           title: 'History',
           tabBarIcon: ({ color }) => <IconSymbol size={32} name="calendar" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          href: null, // Hide from tab bar - functionality moved to Profile
         }}
       />
     </Tabs>
