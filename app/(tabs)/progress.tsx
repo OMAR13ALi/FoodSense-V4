@@ -122,35 +122,25 @@ export default function ProgressScreen() {
     textFontSize: 10,
   }));
 
-  // Prepare macro chart data - side by side bars
-  const macroChartData: any[] = [];
-  summaries.forEach((day, index) => {
-    const label = formatDateLabel(day.date);
-
-    // Protein bar
-    macroChartData.push({
-      value: day.totalProtein,
-      label: index === 0 ? label : '',
-      frontColor: '#6C9BD1', // Blue for protein
-      spacing: 2,
-      labelWidth: 30,
-      labelTextStyle: { color: colors.textSecondary, fontSize: 10 },
-    });
-
-    // Carbs bar
-    macroChartData.push({
-      value: day.totalCarbs,
-      frontColor: '#FFA07A', // Orange for carbs
-      spacing: 2,
-    });
-
-    // Fat bar
-    macroChartData.push({
-      value: day.totalFat,
-      frontColor: '#98D8AA', // Green for fat
-      spacing: index < summaries.length - 1 ? 24 : 2,
-    });
-  });
+  // Prepare macro chart data - stacked bars
+  const macroChartData: any[] = summaries.map((day) => ({
+    stacks: [
+      {
+        value: day.totalProtein,
+        color: '#6C9BD1', // Blue for protein
+      },
+      {
+        value: day.totalCarbs,
+        color: '#FFA07A', // Orange for carbs
+      },
+      {
+        value: day.totalFat,
+        color: '#98D8AA', // Green for fat
+      },
+    ],
+    label: formatDateLabel(day.date),
+    labelTextStyle: { color: colors.textSecondary, fontSize: 11, fontWeight: '500' },
+  }));
 
   const handlePreviousWeek = () => {
     setWeekOffset(weekOffset - 1);
@@ -227,6 +217,7 @@ export default function ProgressScreen() {
             {/* Weekly Summary Cards */}
             <View style={styles.summaryCardsContainer}>
               <View style={[styles.summaryCard, { backgroundColor: colors.cardBackground }]}>
+                <Text style={styles.summaryCardIcon}>⚡</Text>
                 <Text style={[styles.summaryCardValue, { color: colors.text }]}>
                   {weeklyStats.totalCalories.toLocaleString()}
                 </Text>
@@ -236,6 +227,7 @@ export default function ProgressScreen() {
               </View>
 
               <View style={[styles.summaryCard, { backgroundColor: colors.cardBackground }]}>
+                <Text style={styles.summaryCardIcon}>🕐</Text>
                 <Text style={[styles.summaryCardValue, { color: colors.text }]}>
                   {weeklyStats.avgCalories.toLocaleString()}
                 </Text>
@@ -245,6 +237,7 @@ export default function ProgressScreen() {
               </View>
 
               <View style={[styles.summaryCard, { backgroundColor: colors.cardBackground }]}>
+                <Text style={styles.summaryCardIcon}>🍴</Text>
                 <Text style={[styles.summaryCardValue, { color: colors.text }]}>
                   {weeklyStats.totalMeals}
                 </Text>
@@ -273,24 +266,24 @@ export default function ProgressScreen() {
               ) : (
                 <LineChart
                   data={calorieChartData}
-                  width={SCREEN_WIDTH - 72}
-                  height={200}
-                  spacing={40}
+                  width={SCREEN_WIDTH - 80}
+                  height={220}
+                  spacing={42}
                   initialSpacing={20}
                   endSpacing={20}
-                  color="#6C9BD1"
+                  color="#5DADE2"
                   thickness={3}
-                  startFillColor="rgba(108, 155, 209, 0.3)"
-                  endFillColor="rgba(108, 155, 209, 0.05)"
+                  startFillColor="rgba(93, 173, 226, 0.35)"
+                  endFillColor="rgba(93, 173, 226, 0.08)"
                   startOpacity={0.9}
                   endOpacity={0.2}
                   areaChart
                   curved
                   hideDataPoints={false}
-                  dataPointsHeight={8}
-                  dataPointsWidth={8}
-                  dataPointsColor="#6C9BD1"
-                  dataPointsRadius={4}
+                  dataPointsHeight={10}
+                  dataPointsWidth={10}
+                  dataPointsColor="#5DADE2"
+                  dataPointsRadius={5}
                   textColor1={colors.textSecondary}
                   textShiftY={-8}
                   textShiftX={0}
@@ -353,11 +346,11 @@ export default function ProgressScreen() {
                 </View>
               ) : (
                 <BarChart
-                  data={macroChartData}
-                  width={SCREEN_WIDTH - 72}
-                  height={200}
-                  barWidth={12}
-                  spacing={2}
+                  stackData={macroChartData}
+                  width={SCREEN_WIDTH - 80}
+                  height={220}
+                  barWidth={36}
+                  spacing={22}
                   roundedTop
                   roundedBottom
                   hideRules
@@ -367,9 +360,12 @@ export default function ProgressScreen() {
                   yAxisColor={colors.border}
                   yAxisTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
                   noOfSections={4}
-                  maxValue={Math.max(...macroChartData.map(d => d.value), 200)}
-                  initialSpacing={12}
-                  endSpacing={12}
+                  maxValue={Math.max(
+                    ...summaries.map(d => d.totalProtein + d.totalCarbs + d.totalFat),
+                    200
+                  )}
+                  initialSpacing={20}
+                  endSpacing={20}
                 />
               )}
             </View>
@@ -449,24 +445,28 @@ const styles = StyleSheet.create({
   },
   summaryCardsContainer: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 24,
   },
   summaryCard: {
     flex: 1,
-    padding: 14,
-    borderRadius: 14,
+    padding: 18,
+    borderRadius: 16,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  summaryCardIcon: {
+    fontSize: 28,
+    marginBottom: 8,
   },
   summaryCardValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
-    marginBottom: 3,
+    marginBottom: 4,
   },
   summaryCardLabel: {
     fontSize: 11,
@@ -474,19 +474,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   chartContainer: {
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 16,
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   chartTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   legend: {
     flexDirection: 'row',

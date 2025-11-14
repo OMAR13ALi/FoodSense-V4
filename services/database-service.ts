@@ -135,35 +135,54 @@ function getDayBounds(date: Date): { start: string; end: string } {
 // =====================================================
 
 /**
- * Save meals for a specific date
+ * Save meals for a specific date using upsert (prevents duplicate key errors)
  */
 export async function saveMeals(meals: MealEntry[], date: Date = new Date()): Promise<void> {
   const userId = await getCurrentUserId();
   const { start, end } = getDayBounds(date);
 
   try {
-    // Delete all existing meals for this date
-    const { error: deleteError } = await supabase
-      .from('meals')
-      .delete()
-      .eq('user_id', userId)
-      .gte('timestamp', start)
-      .lte('timestamp', end);
+    // First, delete any meals not in the current meals array
+    const mealIds = meals.map(m => m.id);
+    if (mealIds.length > 0) {
+      await supabase
+        .from('meals')
+        .delete()
+        .eq('user_id', userId)
+        .gte('timestamp', start)
+        .lte('timestamp', end)
+        .not('id', 'in', `(${mealIds.map(id => `"${id}"`).join(',')})`);
+    } else {
+      // No meals - delete all for this date
+      await supabase
+        .from('meals')
+        .delete()
+        .eq('user_id', userId)
+        .gte('timestamp', start)
+        .lte('timestamp', end);
+    }
 
-    if (deleteError) throw deleteError;
-
-    // Insert all meals for this date (if any)
+    // Upsert all meals (insert or update if exists)
     if (meals.length > 0) {
-      const mealsToInsert = meals.map((meal) => mealToDbFormat(meal, userId));
+      const mealsToUpsert = meals.map((meal) => mealToDbFormat(meal, userId));
 
-      const { error: insertError } = await supabase.from('meals').insert(mealsToInsert);
+      const { error: upsertError } = await supabase
+        .from('meals')
+        .upsert(mealsToUpsert, { onConflict: 'id' });
 
-      if (insertError) throw insertError;
+      if (upsertError) throw upsertError;
     }
   } catch (error: any) {
     console.error('Failed to save meals:', error);
     throw new Error(`Failed to save meals: ${error.message || 'Unknown error'}`);
   }
+}
+
+/**
+ * Immediately save meals without debouncing (for logout/app backgrounding)
+ */
+export async function saveMealsImmediate(meals: MealEntry[], date: Date = new Date()): Promise<void> {
+  return saveMeals(meals, date);
 }
 
 /**

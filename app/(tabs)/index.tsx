@@ -10,7 +10,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
@@ -19,15 +18,16 @@ import { useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '@/hooks/useTheme';
 import { useApp } from '@/contexts/AppContext';
+import { useHaptics } from '@/hooks/useHaptics';
 import { COLORS } from '@/constants/mockData';
 import { CalorieProgressBar } from '@/components/CalorieProgressBar';
 import { CircularSettingsButton } from '@/components/CircularSettingsButton';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { NutritionDetailsModal } from '@/components/NutritionDetailsModal';
 import { AnimatedCalorieText } from '@/components/AnimatedCalorieText';
 import { FavoritesPanel } from '@/components/FavoritesPanel';
 import { MealEntry, CalorieAnimationStatus, FavoriteMeal } from '@/types';
 import { analyzeNutrition } from '@/services/ai-service';
+import { getAnimationConfig } from '@/utils/animationConfigs';
 
 interface LineCalories {
   [lineIndex: number]: {
@@ -48,6 +48,9 @@ export default function DashboardScreen() {
   const router = useRouter();
 
   const { state, addMeal, updateMeal, addMealFromFavorite, isLoading, error, clearError } = useApp();
+  const haptics = useHaptics();
+  const animConfig = getAnimationConfig(state.animationSettings.intensity);
+  
   const [text, setText] = useState('');
   const [lineCalories, setLineCalories] = useState<LineCalories>({});
   const [selectedMeal, setSelectedMeal] = useState<MealEntry | null>(null);
@@ -114,6 +117,11 @@ export default function DashboardScreen() {
           },
         }));
 
+        // Phase 1 haptic feedback
+        if (animConfig.phase1.haptic) {
+          haptics.trigger(animConfig.phase1.haptic);
+        }
+
         // Track start time for minimum display duration
         const startTime = Date.now();
 
@@ -129,6 +137,11 @@ export default function DashboardScreen() {
                 sources: [], // Will be updated when result arrives
               },
             }));
+
+            // Phase 2 haptic feedback
+            if (animConfig.phase2.haptic) {
+              haptics.trigger(animConfig.phase2.haptic);
+            }
           }, 350);
 
           // Call real AI API
@@ -205,6 +218,11 @@ export default function DashboardScreen() {
               status: 'done',
             },
           }));
+
+          // Phase 3 haptic feedback
+          if (animConfig.phase3.haptic) {
+            haptics.trigger(animConfig.phase3.haptic);
+          }
         } catch (error: any) {
           console.error('AI analysis error:', error);
 
