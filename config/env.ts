@@ -26,24 +26,10 @@ interface EnvConfig {
   debugMode: boolean;
 }
 
-// TEMPORARY: Hardcode API keys for testing
-const TEMP_OPENROUTER_KEY = 'api-key';
-const TEMP_PERPLEXITY_KEY = 'model-key';
-
-
 // Get environment variables from expo-constants
 const getEnvVar = (key: string, optional: boolean = false): string => {
   const value = Constants.expoConfig?.extra?.[key];
   if (!value) {
-    // Fallback to hardcoded keys for testing
-    if (key === 'openRouterApiKey') {
-      console.warn('Using temporary hardcoded OpenRouter API key. Fix .env loading for production.');
-      return TEMP_OPENROUTER_KEY;
-    }
-    if (key === 'perplexityApiKey') {
-      console.warn('Using temporary hardcoded Perplexity API key. Fix .env loading for production.');
-      return TEMP_PERPLEXITY_KEY;
-    }
     // If optional, return empty string
     if (optional) {
       return '';

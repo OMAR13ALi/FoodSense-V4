@@ -18,7 +18,8 @@
       "Bash(cat:*)",
       "Bash(findstr:*)",
       "Bash(test:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "WebFetch(domain:www.canva.com)"
     ],
     "deny": [],
     "ask": []
