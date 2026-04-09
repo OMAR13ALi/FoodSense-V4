@@ -22,8 +22,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { COLORS, MACRO_EMOJIS } from '@/constants/mockData';
 import { SettingsRow } from '@/components/SettingsRow';
 import { ToggleSwitch } from '@/components/ToggleSwitch';
-import { UserProfile } from '@/types';
+import { UserProfile, AnimationIntensity } from '@/types';
 import * as ProfileService from '@/services/profile-service';
+import { getIntensityLabel, getIntensityDescription, getIntensityEmoji } from '@/utils/animationConfigs';
 
 type EditMode = 'goal' | 'physical' | 'dietary' | null;
 
@@ -39,13 +40,14 @@ export default function ProfileScreen() {
   const colorScheme = useTheme();
   const colors = COLORS[colorScheme];
   const { user } = useAuth();
-  const { state, updateSettings } = useApp();
+  const { state, updateSettings, updateAnimationSettings } = useApp();
   const { signOut } = useAuth();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingData, setEditingData] = useState<EditingData | null>(null);
   const [tempValue, setTempValue] = useState('');
+  const [showIntensityPicker, setShowIntensityPicker] = useState(false);
 
   // Load profile on mount
   useEffect(() => {
@@ -369,6 +371,43 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* Animation Preferences Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            ANIMATION PREFERENCES
+          </Text>
+
+          <SettingsRow
+            emoji={getIntensityEmoji(state.animationSettings.intensity)}
+            label="Animation Intensity"
+            value={getIntensityLabel(state.animationSettings.intensity)}
+            onPress={() => setShowIntensityPicker(true)}
+            showChevron
+          />
+
+          <SettingsRow
+            emoji="📳"
+            label="Haptic Feedback"
+            rightComponent={
+              <ToggleSwitch
+                value={state.animationSettings.haptics}
+                onValueChange={(value) => updateAnimationSettings({ haptics: value })}
+              />
+            }
+          />
+
+          <SettingsRow
+            emoji="✨"
+            label="Particle Effects"
+            rightComponent={
+              <ToggleSwitch
+                value={state.animationSettings.particles}
+                onValueChange={(value) => updateAnimationSettings({ particles: value })}
+              />
+            }
+          />
+        </View>
+
         {/* About Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ABOUT</Text>
@@ -398,6 +437,67 @@ export default function ProfileScreen() {
         {/* Bottom spacing for floating tab bar */}
         <View style={{ height: Platform.OS === 'android' ? 130 : 120 }} />
       </ScrollView>
+
+      {/* Animation Intensity Picker Modal */}
+      <Modal visible={showIntensityPicker} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Animation Intensity
+            </Text>
+
+            <View style={styles.intensityOptions}>
+              {(['full', 'balanced', 'minimal', 'off'] as AnimationIntensity[]).map((intensity) => (
+                <Pressable
+                  key={intensity}
+                  style={[
+                    styles.intensityOption,
+                    { 
+                      backgroundColor: state.animationSettings.intensity === intensity 
+                        ? colors.primary 
+                        : colors.background,
+                      borderColor: colors.border,
+                    }
+                  ]}
+                  onPress={() => {
+                    updateAnimationSettings({ intensity });
+                    setShowIntensityPicker(false);
+                  }}
+                >
+                  <Text style={styles.intensityEmoji}>{getIntensityEmoji(intensity)}</Text>
+                  <Text style={[
+                    styles.intensityLabel,
+                    { 
+                      color: state.animationSettings.intensity === intensity 
+                        ? '#FFFFFF' 
+                        : colors.text 
+                    }
+                  ]}>
+                    {getIntensityLabel(intensity)}
+                  </Text>
+                  <Text style={[
+                    styles.intensityDescription,
+                    { 
+                      color: state.animationSettings.intensity === intensity 
+                        ? 'rgba(255, 255, 255, 0.8)' 
+                        : colors.textSecondary 
+                    }
+                  ]}>
+                    {getIntensityDescription(intensity)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable
+              style={[styles.modalButton, { backgroundColor: colors.border, marginTop: 16 }]}
+              onPress={() => setShowIntensityPicker(false)}
+            >
+              <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit Modal */}
       <Modal visible={!!editingData} transparent animationType="slide">
@@ -545,5 +645,27 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  intensityOptions: {
+    gap: 12,
+  },
+  intensityOption: {
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  intensityEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  intensityLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  intensityDescription: {
+    fontSize: 14,
+    fontWeight: '400',
   },
 });

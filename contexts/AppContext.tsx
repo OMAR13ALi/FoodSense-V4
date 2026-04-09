@@ -3,11 +3,43 @@
  */
 
 import React, { createContext, useContext, useReducer, useMemo, ReactNode, useEffect } from 'react';
-import { AppState, AppAction, MealEntry, UserSettings } from '@/types';
+import { AppState as RNAppState } from 'react-native';
+import { AppState, AppAction, MealEntry, UserSettings, FavoriteMeal, AnimationSettings } from '@/types';
 import { DEFAULT_SETTINGS } from '@/constants/mockData';
 import * as StorageService from '@/services/storage-service';
+import * as FavoritesService from '@/services/favorites-service';
+import * as AnimationSettingsService from '@/services/animation-settings-service';
+import { saveMealsImmediate } from '@/services/database-service';
 import { generateUUID } from '@/services/device-id-service';
 import { useAuth } from '@/contexts/AuthContext';
+
+/**
+ * Helper to safely save meals with auth check
+ * Prevents errors when saving during logout or when user is not authenticated
+ */
+const trySaveMeals = async (meals: MealEntry[], user: any): Promise<void> => {
+  // Skip if no user or no data
+  if (!user || meals.length === 0) {
+    return;
+  }
+
+  try {
+    await saveMealsImmediate(meals, new Date());
+  } catch (error: any) {
+    // Only suppress expected auth errors during logout
+    const isAuthError = error?.message?.includes('authenticated') ||
+                       error?.message?.includes('Authentication') ||
+                       error?.message?.includes('row-level security');
+
+    if (!isAuthError) {
+      // This is a real error - still log and throw it
+      console.error('Unexpected error saving meals:', error);
+      throw error;
+    }
+    // Auth errors during logout are expected - silently ignore
+    // (User is already logged out, no point in saving)
+  }
+};
 
 // Calculate totals from meals
 const calculateTotals = (meals: MealEntry[]) => {
@@ -26,6 +58,8 @@ const calculateTotals = (meals: MealEntry[]) => {
 const initialState: AppState = {
   meals: [],
   settings: DEFAULT_SETTINGS,
+  favorites: [],
+  animationSettings: AnimationSettingsService.DEFAULT_ANIMATION_SETTINGS,
   totalCalories: 0,
   totalProtein: 0,
   totalCarbs: 0,
@@ -41,6 +75,14 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
         ...state,
         meals: newMeals,
         ...calculateTotals(newMeals),
+      };
+    }
+
+    case 'SET_MEALS': {
+      return {
+        ...state,
+        meals: action.payload,
+        ...calculateTotals(action.payload),
       };
     }
 
@@ -71,6 +113,13 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
       };
     }
 
+    case 'UPDATE_ANIMATION_SETTINGS': {
+      return {
+        ...state,
+        animationSettings: { ...state.animationSettings, ...action.payload },
+      };
+    }
+
     case 'CLEAR_MEALS': {
       return {
         ...state,
@@ -92,6 +141,38 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
       };
     }
 
+    case 'SET_FAVORITES': {
+      return {
+        ...state,
+        favorites: action.payload,
+      };
+    }
+
+    case 'ADD_FAVORITE': {
+      return {
+        ...state,
+        favorites: [...state.favorites, action.payload],
+      };
+    }
+
+    case 'UPDATE_FAVORITE': {
+      const updatedFavorites = state.favorites.map((fav) =>
+        fav.id === action.payload.id ? { ...fav, ...action.payload.updates } : fav
+      );
+      return {
+        ...state,
+        favorites: updatedFavorites,
+      };
+    }
+
+    case 'DELETE_FAVORITE': {
+      const filteredFavorites = state.favorites.filter((fav) => fav.id !== action.payload);
+      return {
+        ...state,
+        favorites: filteredFavorites,
+      };
+    }
+
     default:
       return state;
   }
@@ -105,8 +186,14 @@ interface AppContextType {
   updateMeal: (id: string, updates: Partial<MealEntry>) => void;
   deleteMeal: (id: string) => void;
   updateSettings: (settings: Partial<UserSettings>) => void;
+  updateAnimationSettings: (settings: Partial<AnimationSettings>) => void;
   clearMeals: () => void;
   getRemainingCalories: () => number;
+  // Favorite meals functions
+  addFavorite: (favorite: Omit<FavoriteMeal, 'id' | 'user_id' | 'frequency_count' | 'created_at' | 'updated_at' | 'last_used_at'>) => Promise<void>;
+  deleteFavoriteById: (id: string) => Promise<void>;
+  addMealFromFavorite: (favoriteId: string) => Promise<void>;
+  refreshFavorites: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
   clearError: () => void;
@@ -121,6 +208,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [isInitialized, setIsInitialized] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isLoadingInitialData, setIsLoadingInitialData] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // Load data from Supabase when user is authenticated
@@ -139,6 +227,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
 
       setIsLoading(true);
+      setIsLoadingInitialData(true);
       setError(null);
 
       try {
@@ -149,48 +238,96 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const savedSettings = await StorageService.loadSettings();
         const settings = savedSettings || DEFAULT_SETTINGS;
 
+        // Load animation settings
+        const animationSettings = await AnimationSettingsService.loadAnimationSettings();
+
+        // Load favorites
+        const favorites = await FavoritesService.getFavorites();
+
         // Dispatch loaded data
         if (savedSettings) {
           dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
         }
+        // Always dispatch animation settings (with defaults if needed)
+        dispatch({ type: 'UPDATE_ANIMATION_SETTINGS', payload: animationSettings });
 
-        // Load meals one by one to trigger recalculation
-        meals.forEach(meal => {
-          dispatch({ type: 'ADD_MEAL', payload: meal });
-        });
+        // Load all meals at once (batch dispatch to prevent multiple re-renders)
+        if (meals.length > 0) {
+          dispatch({ type: 'SET_MEALS', payload: meals });
+        }
+
+        // Load favorites
+        dispatch({ type: 'SET_FAVORITES', payload: favorites });
 
         setIsInitialized(true);
         setIsLoading(false);
+        setIsLoadingInitialData(false);
       } catch (error: any) {
         console.error('Error loading initial data:', error);
         setError(error?.message || 'Failed to load data from cloud');
         setIsInitialized(true);
         setIsLoading(false);
+        setIsLoadingInitialData(false);
       }
     };
 
     loadInitialData();
   }, [user, authLoading]);
 
-  // Clear data when user logs out
+  // Clear data when user logs out (with safe save first)
   useEffect(() => {
     if (!authLoading && !user && isInitialized) {
-      // User logged out, clear all data
-      dispatch({ type: 'CLEAR_MEALS' });
-      dispatch({ type: 'UPDATE_SETTINGS', payload: DEFAULT_SETTINGS });
-      setIsInitialized(false);
-    }
-  }, [user, authLoading, isInitialized]);
+      // Try to save meals before clearing (will gracefully handle if already logged out)
+      const handleLogout = async () => {
+        // Use safe save helper - won't throw if user is already gone
+        await trySaveMeals(state.meals, user);
 
-  // Save meals to Supabase whenever they change (debounced)
+        // Clear all data
+        dispatch({ type: 'CLEAR_MEALS' });
+        dispatch({ type: 'UPDATE_SETTINGS', payload: DEFAULT_SETTINGS });
+        setIsInitialized(false);
+      };
+
+      handleLogout();
+    }
+  }, [user, authLoading, isInitialized, state.meals]);
+
+  // Save meals to Supabase whenever they change (debounced with 500ms delay)
   useEffect(() => {
-    if (isInitialized && user && state.meals.length >= 0) {
+    // Skip save if still loading initial data or user not authenticated
+    if (!isInitialized || !user || isLoadingInitialData) {
+      return;
+    }
+
+    // Debounce the save to prevent multiple rapid saves
+    const timeout = setTimeout(() => {
       StorageService.saveMeals(state.meals, new Date()).catch((error: any) => {
         console.error('Error saving meals:', error);
         setError(error?.message || 'Failed to save meals to cloud');
       });
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [state.meals, isInitialized, user, isLoadingInitialData]);
+
+  // Force save when app goes to background to prevent data loss
+  useEffect(() => {
+    if (!user || !isInitialized) {
+      return;
     }
-  }, [state.meals, isInitialized, user]);
+
+    const subscription = RNAppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' && state.meals.length > 0) {
+        // Force immediate save when app goes to background (safe version)
+        trySaveMeals(state.meals, user).catch((error) => {
+          // Only real errors will reach here (auth errors are suppressed)
+          console.error('Unexpected error saving meals on app background:', error);
+        });
+      }
+    });
+
+    return () => subscription.remove();
+  }, [state.meals, user, isInitialized]);
 
   // Save settings to Supabase whenever they change (debounced)
   useEffect(() => {
@@ -225,6 +362,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
   };
 
+  const updateAnimationSettings = (settings: Partial<AnimationSettings>) => {
+    dispatch({ type: 'UPDATE_ANIMATION_SETTINGS', payload: settings });
+    // Save to storage
+    const newSettings = { ...state.animationSettings, ...settings };
+    AnimationSettingsService.saveAnimationSettings(newSettings).catch(err => {
+      console.error('Failed to save animation settings:', err);
+    });
+  };
+
   const clearMeals = () => {
     dispatch({ type: 'CLEAR_MEALS' });
   };
@@ -237,6 +383,68 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
 
+  // Favorite meals helper functions
+  const addFavorite = async (favorite: Omit<FavoriteMeal, 'id' | 'user_id' | 'frequency_count' | 'created_at' | 'updated_at' | 'last_used_at'>) => {
+    try {
+      const newFavorite = await FavoritesService.addFavorite(favorite);
+      dispatch({ type: 'ADD_FAVORITE', payload: newFavorite });
+    } catch (error: any) {
+      console.error('Error adding favorite:', error);
+      setError(error?.message || 'Failed to add favorite');
+      throw error;
+    }
+  };
+
+  const deleteFavoriteById = async (id: string) => {
+    try {
+      await FavoritesService.deleteFavorite(id);
+      dispatch({ type: 'DELETE_FAVORITE', payload: id });
+    } catch (error: any) {
+      console.error('Error deleting favorite:', error);
+      setError(error?.message || 'Failed to delete favorite');
+      throw error;
+    }
+  };
+
+  const addMealFromFavorite = async (favoriteId: string) => {
+    try {
+      const favorite = state.favorites.find(f => f.id === favoriteId);
+      if (!favorite) {
+        throw new Error('Favorite not found');
+      }
+
+      // Add meal from favorite
+      addMeal({
+        text: favorite.name,
+        calories: favorite.calories,
+        protein: favorite.protein,
+        carbs: favorite.carbs,
+        fat: favorite.fat,
+      });
+
+      // Increment usage count
+      await FavoritesService.incrementFavoriteUsage(favoriteId);
+
+      // Refresh favorites to get updated counts
+      await refreshFavorites();
+    } catch (error: any) {
+      console.error('Error adding meal from favorite:', error);
+      setError(error?.message || 'Failed to add meal from favorite');
+      throw error;
+    }
+  };
+
+  const refreshFavorites = async () => {
+    try {
+      const favorites = await FavoritesService.getFavorites();
+      dispatch({ type: 'SET_FAVORITES', payload: favorites });
+    } catch (error: any) {
+      console.error('Error refreshing favorites:', error);
+      setError(error?.message || 'Failed to refresh favorites');
+      throw error;
+    }
+  };
+
   const contextValue = useMemo(
     () => ({
       state,
@@ -245,8 +453,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       updateMeal,
       deleteMeal,
       updateSettings,
+      updateAnimationSettings,
       clearMeals,
       getRemainingCalories,
+      addFavorite,
+      deleteFavoriteById,
+      addMealFromFavorite,
+      refreshFavorites,
       isLoading,
       error,
       clearError,

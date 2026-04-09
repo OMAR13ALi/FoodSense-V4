@@ -34,6 +34,8 @@ export interface UserSettings {
 export interface AppState {
   meals: MealEntry[];
   settings: UserSettings;
+  favorites: FavoriteMeal[];
+  animationSettings: AnimationSettings;
   totalCalories: number;
   totalProtein: number;
   totalCarbs: number;
@@ -43,11 +45,17 @@ export interface AppState {
 // Action types for context
 export type AppAction =
   | { type: 'ADD_MEAL'; payload: MealEntry }
+  | { type: 'SET_MEALS'; payload: MealEntry[] }
   | { type: 'UPDATE_MEAL'; payload: { id: string; updates: Partial<MealEntry> } }
   | { type: 'DELETE_MEAL'; payload: string }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<UserSettings> }
+  | { type: 'UPDATE_ANIMATION_SETTINGS'; payload: Partial<AnimationSettings> }
   | { type: 'CLEAR_MEALS' }
-  | { type: 'SET_LOADING'; payload: { id: string; isLoading: boolean } };
+  | { type: 'SET_LOADING'; payload: { id: string; isLoading: boolean } }
+  | { type: 'SET_FAVORITES'; payload: FavoriteMeal[] }
+  | { type: 'ADD_FAVORITE'; payload: FavoriteMeal }
+  | { type: 'UPDATE_FAVORITE'; payload: { id: string; updates: Partial<FavoriteMeal> } }
+  | { type: 'DELETE_FAVORITE'; payload: string };
 
 // Macro nutrient type
 export interface MacroNutrient {
@@ -79,6 +87,16 @@ export interface APIError {
 
 // Calorie Animation Status Type
 export type CalorieAnimationStatus = 'idle' | 'calculating' | 'sources' | 'animating' | 'done';
+
+// Animation Settings Types
+export type AnimationIntensity = 'full' | 'balanced' | 'minimal' | 'off';
+
+export interface AnimationSettings {
+  intensity: AnimationIntensity;
+  haptics: boolean;
+  particles: boolean;
+  respectSystemSettings: boolean;
+}
 
 // ============================================
 // AUTH & USER PROFILE TYPES

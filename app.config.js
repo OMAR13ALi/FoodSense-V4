@@ -15,6 +15,13 @@ export default {
       supportsTablet: true
     },
     android: {
+      package: 'com.calorieapp',
+      versionCode: 1,
+      permissions: [
+        'INTERNET',
+        'ACCESS_NETWORK_STATE',
+        'VIBRATE'
+      ],
       adaptiveIcon: {
         backgroundColor: '#E6F4FE',
         foregroundImage: './assets/images/android-icon-foreground.png',
@@ -49,6 +56,9 @@ export default {
     },
     // This is where your .env variables will be accessible
     extra: {
+      eas: {
+        projectId: "9324a112-dca9-4121-b387-7c06bf7a857e"
+      },
       openRouterApiKey: process.env.OPENROUTER_API_KEY,
       perplexityApiKey: process.env.PERPLEXITY_API_KEY,
       supabaseUrl: process.env.SUPABASE_URL,

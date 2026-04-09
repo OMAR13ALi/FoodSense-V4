@@ -11,12 +11,15 @@ import {
   Pressable,
   TextInput,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { COLORS } from '@/constants/mockData';
 import { MealEntry } from '@/types';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SourceIcons } from '@/components/SourceIcon';
+import { useApp } from '@/contexts/AppContext';
 
 interface NutritionDetailsModalProps {
   visible: boolean;
@@ -33,8 +36,12 @@ export const NutritionDetailsModal: React.FC<NutritionDetailsModalProps> = ({
 }) => {
   const colorScheme = useColorScheme();
   const colors = COLORS[colorScheme ?? 'light'];
+  const { addFavorite } = useApp();
 
   const [isEditing, setIsEditing] = useState(false);
+  const [isSavingFavorite, setIsSavingFavorite] = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [favoriteName, setFavoriteName] = useState('');
   const [editedCalories, setEditedCalories] = useState('');
   const [editedProtein, setEditedProtein] = useState('');
   const [editedCarbs, setEditedCarbs] = useState('');
@@ -65,6 +72,36 @@ export const NutritionDetailsModal: React.FC<NutritionDetailsModalProps> = ({
 
   const handleCancel = () => {
     setIsEditing(false);
+  };
+
+  const handleSaveAsFavorite = () => {
+    setFavoriteName(meal.text); // Pre-fill with meal name
+    setShowNamePrompt(true);
+  };
+
+  const confirmSaveFavorite = async () => {
+    if (!favoriteName || favoriteName.trim() === '') {
+      Alert.alert('Error', 'Please enter a name for the favorite meal');
+      return;
+    }
+
+    setIsSavingFavorite(true);
+    setShowNamePrompt(false);
+    try {
+      await addFavorite({
+        name: favoriteName.trim(),
+        calories: meal.calories,
+        protein: meal.protein,
+        carbs: meal.carbs,
+        fat: meal.fat,
+      });
+      Alert.alert('Success', `"${favoriteName.trim()}" saved to favorites!`);
+      onClose();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to save favorite');
+    } finally {
+      setIsSavingFavorite(false);
+    }
   };
 
   // Use AI explanation from meal or fallback to default
@@ -270,18 +307,66 @@ export const NutritionDetailsModal: React.FC<NutritionDetailsModalProps> = ({
                   </Pressable>
                 </>
               ) : (
-                <Pressable
-                  style={[styles.button, styles.editButton, { borderColor: colors.primary }]}
-                  onPress={handleEdit}
-                >
-                  <Text style={[styles.editButtonText, { color: colors.primary }]}>
-                    Edit Nutrition
-                  </Text>
-                </Pressable>
+                <>
+                  <Pressable
+                    style={[styles.button, styles.editButton]}
+                    onPress={handleEdit}
+                  >
+                    <Text style={[styles.editButtonText, { color: colors.primary }]}>
+                      Edit Nutrition
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.button, styles.favoriteButton, { backgroundColor: '#FFD93D' }]}
+                    onPress={handleSaveAsFavorite}
+                    disabled={isSavingFavorite}
+                  >
+                    {isSavingFavorite ? (
+                      <ActivityIndicator color="#000000" />
+                    ) : (
+                      <>
+                        <IconSymbol name="star.fill" size={18} color="#000000" />
+                        <Text style={styles.favoriteButtonText}>Save as Favorite</Text>
+                      </>
+                    )}
+                  </Pressable>
+                </>
               )}
             </View>
           </ScrollView>
         </View>
+
+        {/* Name Input Modal for Save as Favorite */}
+        {showNamePrompt && (
+          <View style={styles.promptOverlay}>
+            <View style={[styles.promptBox, { backgroundColor: '#FFFFFF' }]}>
+              <Text style={styles.promptTitle}>Save as Favorite</Text>
+              <Text style={styles.promptMessage}>Enter a name for this meal template:</Text>
+              <TextInput
+                style={styles.promptInput}
+                value={favoriteName}
+                onChangeText={setFavoriteName}
+                placeholder="Meal name"
+                autoFocus
+                placeholderTextColor="#999"
+              />
+              <View style={styles.promptButtons}>
+                <Pressable
+                  style={[styles.promptButton, styles.promptCancelButton]}
+                  onPress={() => setShowNamePrompt(false)}
+                >
+                  <Text style={styles.promptButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.promptButton, styles.promptSaveButton, { backgroundColor: colors.primary }]}
+                  onPress={confirmSaveFavorite}
+                >
+                  <Text style={styles.promptSaveText}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -495,5 +580,93 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F7',
     borderRadius: 12,
     marginBottom: 16,
+  },
+  favoriteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#FFD93D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  favoriteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  // Name Prompt Modal Styles
+  promptOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  promptBox: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  promptTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  promptMessage: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  promptInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: '#000000',
+    backgroundColor: '#F5F5F7',
+    marginBottom: 20,
+  },
+  promptButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  promptButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  promptCancelButton: {
+    backgroundColor: '#E5E5EA',
+  },
+  promptSaveButton: {
+    shadowColor: '#4A90E2',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  promptButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  promptSaveText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

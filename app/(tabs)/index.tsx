@@ -10,7 +10,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
@@ -19,14 +18,16 @@ import { useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '@/hooks/useTheme';
 import { useApp } from '@/contexts/AppContext';
+import { useHaptics } from '@/hooks/useHaptics';
 import { COLORS } from '@/constants/mockData';
 import { CalorieProgressBar } from '@/components/CalorieProgressBar';
 import { CircularSettingsButton } from '@/components/CircularSettingsButton';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { NutritionDetailsModal } from '@/components/NutritionDetailsModal';
 import { AnimatedCalorieText } from '@/components/AnimatedCalorieText';
-import { MealEntry, CalorieAnimationStatus } from '@/types';
+import { FavoritesPanel } from '@/components/FavoritesPanel';
+import { MealEntry, CalorieAnimationStatus, FavoriteMeal } from '@/types';
 import { analyzeNutrition } from '@/services/ai-service';
+import { getAnimationConfig } from '@/utils/animationConfigs';
 
 interface LineCalories {
   [lineIndex: number]: {
@@ -46,7 +47,10 @@ export default function DashboardScreen() {
   const colors = COLORS[colorScheme];
   const router = useRouter();
 
-  const { state, addMeal, updateMeal, isLoading, error, clearError } = useApp();
+  const { state, addMeal, updateMeal, addMealFromFavorite, isLoading, error, clearError } = useApp();
+  const haptics = useHaptics();
+  const animConfig = getAnimationConfig(state.animationSettings.intensity);
+  
   const [text, setText] = useState('');
   const [lineCalories, setLineCalories] = useState<LineCalories>({});
   const [selectedMeal, setSelectedMeal] = useState<MealEntry | null>(null);
@@ -113,6 +117,11 @@ export default function DashboardScreen() {
           },
         }));
 
+        // Phase 1 haptic feedback
+        if (animConfig.phase1.haptic) {
+          haptics.trigger(animConfig.phase1.haptic);
+        }
+
         // Track start time for minimum display duration
         const startTime = Date.now();
 
@@ -128,6 +137,11 @@ export default function DashboardScreen() {
                 sources: [], // Will be updated when result arrives
               },
             }));
+
+            // Phase 2 haptic feedback
+            if (animConfig.phase2.haptic) {
+              haptics.trigger(animConfig.phase2.haptic);
+            }
           }, 350);
 
           // Call real AI API
@@ -204,6 +218,11 @@ export default function DashboardScreen() {
               status: 'done',
             },
           }));
+
+          // Phase 3 haptic feedback
+          if (animConfig.phase3.haptic) {
+            haptics.trigger(animConfig.phase3.haptic);
+          }
         } catch (error: any) {
           console.error('AI analysis error:', error);
 
@@ -309,6 +328,37 @@ export default function DashboardScreen() {
     setSelectedMeal(null);
   };
 
+  const handleFavoriteTap = async (favorite: FavoriteMeal) => {
+    try {
+      // Add meal from favorite (this handles DB operations and usage tracking)
+      await addMealFromFavorite(favorite.id);
+
+      // Add favorite name to text editor for visual feedback
+      const newText = text ? `${text}\n${favorite.name}` : favorite.name;
+      setText(newText);
+
+      // Show success toast
+      Toast.show({
+        type: 'success',
+        text1: 'Added from favorites',
+        text2: `${favorite.name} (${Math.round(favorite.calories)} cal)`,
+        position: 'top',
+        visibilityTime: 2000,
+      });
+
+      // Focus text input
+      textInputRef.current?.focus();
+    } catch (error: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to add favorite meal',
+        position: 'top',
+        visibilityTime: 3000,
+      });
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <KeyboardAvoidingView
@@ -337,6 +387,18 @@ export default function DashboardScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Favorites Quick Access Panel */}
+          <FavoritesPanel
+            favorites={state.favorites}
+            onFavoriteTap={handleFavoriteTap}
+            isLoading={isLoading}
+            textColor={colors.text}
+            textSecondaryColor={colors.textSecondary}
+            backgroundColor={colors.background}
+            surfaceColor={colors.cardBackground}
+            primaryColor={colors.primary}
+          />
+
           {/* Text Editor */}
           <View style={styles.editorContainer}>
             <TextInput
@@ -439,7 +501,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 110,
+    paddingBottom: Platform.OS === 'android' ? 175 : 156, // Space for progress bar + tab bar
   },
   editorContainer: {
     minHeight: 400,

@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     paddingBottom: Platform.OS === 'android' ? 24 : 20,
-    marginBottom: Platform.OS === 'android' ? 105 : 90, // Space for floating tab bar
+    marginBottom: Platform.OS === 'android' ? 16 : 12, // Tighter spacing above tab bar
     borderTopWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -1 },

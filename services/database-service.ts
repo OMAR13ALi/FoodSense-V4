@@ -135,35 +135,54 @@ function getDayBounds(date: Date): { start: string; end: string } {
 // =====================================================
 
 /**
- * Save meals for a specific date
+ * Save meals for a specific date using upsert (prevents duplicate key errors)
  */
 export async function saveMeals(meals: MealEntry[], date: Date = new Date()): Promise<void> {
   const userId = await getCurrentUserId();
   const { start, end } = getDayBounds(date);
 
   try {
-    // Delete all existing meals for this date
-    const { error: deleteError } = await supabase
-      .from('meals')
-      .delete()
-      .eq('user_id', userId)
-      .gte('timestamp', start)
-      .lte('timestamp', end);
+    // First, delete any meals not in the current meals array
+    const mealIds = meals.map(m => m.id);
+    if (mealIds.length > 0) {
+      await supabase
+        .from('meals')
+        .delete()
+        .eq('user_id', userId)
+        .gte('timestamp', start)
+        .lte('timestamp', end)
+        .not('id', 'in', `(${mealIds.map(id => `"${id}"`).join(',')})`);
+    } else {
+      // No meals - delete all for this date
+      await supabase
+        .from('meals')
+        .delete()
+        .eq('user_id', userId)
+        .gte('timestamp', start)
+        .lte('timestamp', end);
+    }
 
-    if (deleteError) throw deleteError;
-
-    // Insert all meals for this date (if any)
+    // Upsert all meals (insert or update if exists)
     if (meals.length > 0) {
-      const mealsToInsert = meals.map((meal) => mealToDbFormat(meal, userId));
+      const mealsToUpsert = meals.map((meal) => mealToDbFormat(meal, userId));
 
-      const { error: insertError } = await supabase.from('meals').insert(mealsToInsert);
+      const { error: upsertError } = await supabase
+        .from('meals')
+        .upsert(mealsToUpsert, { onConflict: 'id' });
 
-      if (insertError) throw insertError;
+      if (upsertError) throw upsertError;
     }
   } catch (error: any) {
     console.error('Failed to save meals:', error);
     throw new Error(`Failed to save meals: ${error.message || 'Unknown error'}`);
   }
+}
+
+/**
+ * Immediately save meals without debouncing (for logout/app backgrounding)
+ */
+export async function saveMealsImmediate(meals: MealEntry[], date: Date = new Date()): Promise<void> {
+  return saveMeals(meals, date);
 }
 
 /**
@@ -240,6 +259,114 @@ export async function getAllMealDates(): Promise<string[]> {
     console.error('Failed to get meal dates:', error);
     throw new Error(`Failed to get meal dates: ${error.message || 'Unknown error'}`);
   }
+}
+
+/**
+ * Load meals for a date range
+ */
+export async function loadMealsForDateRange(startDate: Date, endDate: Date): Promise<MealEntry[]> {
+  const userId = await getCurrentUserId();
+
+  try {
+    const { data, error } = await supabase
+      .from('meals')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('timestamp', startDate.toISOString())
+      .lte('timestamp', endDate.toISOString())
+      .order('timestamp', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map(mealFromDbFormat);
+  } catch (error: any) {
+    console.error('Failed to load meals for date range:', error);
+    throw new Error(`Failed to load meals for date range: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get daily summaries for a date range
+ * Returns aggregated nutrition data grouped by date
+ */
+export async function getDailySummaries(startDate: Date, endDate: Date): Promise<Array<{
+  date: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  mealCount: number;
+}>> {
+  const userId = await getCurrentUserId();
+
+  try {
+    const { data, error } = await supabase
+      .from('meals')
+      .select('timestamp, calories, protein, carbs, fat')
+      .eq('user_id', userId)
+      .gte('timestamp', startDate.toISOString())
+      .lte('timestamp', endDate.toISOString())
+      .order('timestamp', { ascending: true });
+
+    if (error) throw error;
+
+    // Group meals by date and calculate totals
+    const summariesMap = new Map<string, {
+      totalCalories: number;
+      totalProtein: number;
+      totalCarbs: number;
+      totalFat: number;
+      mealCount: number;
+    }>();
+
+    (data || []).forEach((meal) => {
+      const date = formatDateKey(new Date(meal.timestamp));
+      const existing = summariesMap.get(date) || {
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        mealCount: 0,
+      };
+
+      summariesMap.set(date, {
+        totalCalories: existing.totalCalories + Number(meal.calories),
+        totalProtein: existing.totalProtein + (meal.protein ? Number(meal.protein) : 0),
+        totalCarbs: existing.totalCarbs + (meal.carbs ? Number(meal.carbs) : 0),
+        totalFat: existing.totalFat + (meal.fat ? Number(meal.fat) : 0),
+        mealCount: existing.mealCount + 1,
+      });
+    });
+
+    // Convert map to array
+    return Array.from(summariesMap.entries()).map(([date, stats]) => ({
+      date,
+      ...stats,
+    }));
+  } catch (error: any) {
+    console.error('Failed to get daily summaries:', error);
+    throw new Error(`Failed to get daily summaries: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get last N days of daily summaries
+ */
+export async function getRecentDailySummaries(days: number = 7): Promise<Array<{
+  date: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  mealCount: number;
+}>> {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days + 1);
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  return getDailySummaries(startDate, endDate);
 }
 
 // =====================================================
