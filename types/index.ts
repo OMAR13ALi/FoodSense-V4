@@ -145,6 +145,19 @@ export interface UserProfile {
   created_at: string;
   updated_at: string;
   last_active?: string;
+
+  // Gamification (added in migration 20260410200000)
+  goal_type?: GoalType;
+  target_weight_kg?: number;
+  current_streak?: number;
+  best_streak?: number;
+  last_streak_date?: string;
+
+  // Weight milestone dedup (added in migration 20260410210000)
+  celebrated_milestones?: string[];
+
+  // Weight-change pace (kg/week) used to derive calorie deficit/surplus
+  pace_kg_per_week?: number;
 }
 
 // Onboarding Data (collected before or during signup)
@@ -165,6 +178,11 @@ export interface OnboardingData {
   target_protein?: number;
   target_carbs?: number;
   target_fat?: number;
+
+  // Gamification
+  goal_type?: GoalType;
+  target_weight_kg?: number;
+  pace_kg_per_week?: number;
 }
 
 // Auth Error Type
@@ -173,6 +191,79 @@ export interface AuthError {
   code?: string;
   status?: number;
 }
+
+// ============================================
+// GAMIFICATION TYPES
+// ============================================
+
+export type GoalType = 'weight_loss' | 'maintenance' | 'weight_gain' | 'muscle_gain';
+
+export interface WeightLog {
+  id: string;
+  user_id: string;
+  weight_kg: number;
+  logged_at: string; // YYYY-MM-DD
+  created_at: string;
+}
+
+export interface AchievementDefinition {
+  id: string;
+  title: string;
+  description: string;
+  emoji: string;
+  category: 'streak' | 'goal' | 'nutrition' | 'consistency';
+}
+
+export interface UserAchievement {
+  id: string;
+  user_id: string;
+  achievement_id: string;
+  unlocked_at: string;
+}
+
+export interface AchievementWithStatus extends AchievementDefinition {
+  unlocked: boolean;
+  unlocked_at?: string;
+  progress?: number; // 0..1 fraction toward unlock (only meaningful when !unlocked)
+  progressLabel?: string; // e.g. "5 / 7"
+}
+
+export interface TDEEResult {
+  bmr: number;
+  tdee: number;
+  recommendedCalories: number;
+  adjustment: number; // positive = surplus, negative = deficit
+  paceKgPerWeek: number;
+  weeksToGoal: number | null; // null when no target weight or already at goal
+}
+
+// ============================================
+// WEIGHT MILESTONE CONSTANTS
+// ============================================
+
+export const WEIGHT_MILESTONE_PERCENTS: Record<string, number> = {
+  '10pct': 0.10,
+  '25pct': 0.25,
+  '50pct': 0.50,
+  '75pct': 0.75,
+  '100pct': 1.00,
+};
+
+export const WEIGHT_MILESTONE_LABELS: Record<string, string> = {
+  '10pct': 'Getting Started',
+  '25pct': 'Quarter Way!',
+  '50pct': 'Halfway There!',
+  '75pct': 'Almost Done!',
+  '100pct': 'Goal Reached!',
+};
+
+export const WEIGHT_MILESTONE_EMOJIS: Record<string, string> = {
+  '10pct': '🎯',
+  '25pct': '⭐',
+  '50pct': '🏆',
+  '75pct': '🔥',
+  '100pct': '👑',
+};
 
 // Favorite Meal (matches favorite_meals table)
 export interface FavoriteMeal {

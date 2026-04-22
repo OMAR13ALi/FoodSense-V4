@@ -115,7 +115,7 @@ export default function LoginScreen() {
           {/* Sign Up Link */}
           <View style={styles.footer}>
             <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
             </Text>
             <Pressable onPress={handleSignUp}>
               <Text style={[styles.linkText, { color: colors.caloriePositive }]}>

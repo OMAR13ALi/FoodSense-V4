@@ -13,14 +13,19 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { COLORS } from '@/constants/mockData';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOnboarding } from '@/contexts/OnboardingContext';
+import { useApp } from '@/contexts/AppContext';
 import { AuthInput } from '@/components/auth/AuthInput';
 import { AuthButton } from '@/components/auth/AuthButton';
+import * as ProfileService from '@/services/profile-service';
 
 export default function SignUpScreen() {
   const colorScheme = useTheme();
   const colors = COLORS[colorScheme];
   const router = useRouter();
   const { signUp } = useAuth();
+  const { draft, resetDraft } = useOnboarding();
+  const { updateSettings } = useApp();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -68,6 +73,29 @@ export default function SignUpScreen() {
       if (result.error) {
         // Handle both string and object errors
         setError(typeof result.error === 'string' ? result.error : result.error.message);
+      } else if (result.user && Object.keys(draft).length > 0) {
+        // Flush onboarding draft to profile + local settings
+        try {
+          const { daily_calorie_goal, target_protein, target_carbs, target_fat, ...rest } = draft;
+          await ProfileService.updateUserProfile({
+            ...rest,
+            ...(daily_calorie_goal !== undefined && { daily_calorie_goal }),
+            ...(target_protein !== undefined && { target_protein }),
+            ...(target_carbs !== undefined && { target_carbs }),
+            ...(target_fat !== undefined && { target_fat }),
+          });
+          if (daily_calorie_goal || target_protein || target_carbs || target_fat) {
+            updateSettings({
+              ...(daily_calorie_goal !== undefined && { dailyCalorieGoal: daily_calorie_goal }),
+              ...(target_protein !== undefined && { targetProtein: target_protein }),
+              ...(target_carbs !== undefined && { targetCarbs: target_carbs }),
+              ...(target_fat !== undefined && { targetFat: target_fat }),
+            });
+          }
+          resetDraft();
+        } catch (persistErr) {
+          console.warn('Failed to persist onboarding draft:', persistErr);
+        }
       }
       // Navigation handled by AuthContext
     } catch (err: any) {

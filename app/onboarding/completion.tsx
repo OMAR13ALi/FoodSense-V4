@@ -24,7 +24,7 @@ export default function CompletionScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>
-            You're All Set!
+            You&apos;re All Set!
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Create an account to save your data and access it from any device

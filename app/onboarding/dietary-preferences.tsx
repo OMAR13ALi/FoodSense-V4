@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { COLORS } from '@/constants/mockData';
+import { useOnboarding } from '@/contexts/OnboardingContext';
 
 type DietaryPreference = 'vegetarian' | 'vegan' | 'keto' | 'paleo';
 
@@ -11,9 +12,18 @@ export default function DietaryPreferencesScreen() {
   const colorScheme = useTheme();
   const colors = COLORS[colorScheme];
   const router = useRouter();
+  const { draft, updateDraft } = useOnboarding();
 
-  const [preferences, setPreferences] = useState<DietaryPreference[]>([]);
-  const [allergies, setAllergies] = useState('');
+  const [preferences, setPreferences] = useState<DietaryPreference[]>(() => {
+    const existing = draft.dietary_preference;
+    if (existing && existing !== 'none' && existing !== 'pescatarian') {
+      return [existing as DietaryPreference];
+    }
+    return [];
+  });
+  const [allergies, setAllergies] = useState(
+    draft.allergies ? draft.allergies.join(', ') : ''
+  );
 
   const togglePreference = (pref: DietaryPreference) => {
     if (preferences.includes(pref)) {
@@ -24,14 +34,13 @@ export default function DietaryPreferencesScreen() {
   };
 
   const handleContinue = () => {
-    // Store data
-    const dietaryData = {
-      preferences,
-      allergies: allergies.split(',').map(a => a.trim()).filter(a => a.length > 0),
-    };
-
-    console.log('Dietary preferences:', dietaryData);
-
+    updateDraft({
+      dietary_preference: preferences[0] ?? 'none',
+      allergies: allergies
+        .split(',')
+        .map(a => a.trim())
+        .filter(a => a.length > 0),
+    });
     router.push('/onboarding/goals');
   };
 

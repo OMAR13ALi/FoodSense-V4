@@ -1,43 +1,54 @@
 /**
- * Dashboard Screen - Apple Notes style free-writing interface
+ * Dashboard Screen — Apple Notes style free-writing interface.
+ * Calorie pills are rendered in a flex column aligned to each text line,
+ * never absolutely positioned by hardcoded line-index math.
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '@/hooks/useTheme';
 import { useApp } from '@/contexts/AppContext';
 import { useHaptics } from '@/hooks/useHaptics';
 import { COLORS } from '@/constants/mockData';
-import { CalorieProgressBar } from '@/components/CalorieProgressBar';
+import { designColors, fonts, space } from '@/constants/design';
+import { TAB_BAR_TOTAL_HEIGHT } from '@/constants/layout';
+import { CalorieProgressBar, CALORIE_BAR_COLLAPSED_HEIGHT } from '@/components/CalorieProgressBar';
 import { CircularSettingsButton } from '@/components/CircularSettingsButton';
 import { NutritionDetailsModal } from '@/components/NutritionDetailsModal';
 import { AnimatedCalorieText } from '@/components/AnimatedCalorieText';
 import { FavoritesPanel } from '@/components/FavoritesPanel';
+import { StreakBadge } from '@/components/StreakBadge';
 import { MealEntry, CalorieAnimationStatus, FavoriteMeal } from '@/types';
 import { analyzeNutrition } from '@/services/ai-service';
+import { checkAndUnlockAchievements, calculateAndSaveStreak, getAllMealDates } from '@/services/gamification-service';
 import { getAnimationConfig } from '@/utils/animationConfigs';
+import { useStreakData } from '@/hooks/useStreakData';
+
+const LINE_HEIGHT = 26;
+const EDITOR_PADDING_VERTICAL = 16;
+const PILL_COLUMN_WIDTH = 110;
 
 interface LineCalories {
   [lineIndex: number]: {
-    text: string; // Track what text was calculated to detect changes
+    text: string;
     calories: number;
     protein: number;
     carbs: number;
     fat: number;
     mealId: string;
-    sources?: string[]; // Track sources for inline icon display
+    sources?: string[];
     status: CalorieAnimationStatus;
   };
 }
@@ -45,20 +56,94 @@ interface LineCalories {
 export default function DashboardScreen() {
   const colorScheme = useTheme();
   const colors = COLORS[colorScheme];
-  const router = useRouter();
+  const c = designColors[colorScheme];
+  const insets = useSafeAreaInsets();
 
   const { state, addMeal, updateMeal, addMealFromFavorite, isLoading, error, clearError } = useApp();
   const haptics = useHaptics();
   const animConfig = getAnimationConfig(state.animationSettings.intensity);
-  
+  const { currentStreak } = useStreakData();
+
   const [text, setText] = useState('');
   const [lineCalories, setLineCalories] = useState<LineCalories>({});
   const [selectedMeal, setSelectedMeal] = useState<MealEntry | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow',
+      () => setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide',
+      () => setKeyboardVisible(false),
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const debounceTimerRef = useRef<{ [key: number]: ReturnType<typeof setTimeout> }>({});
   const textInputRef = useRef<TextInput>(null);
+  const prevStreakRef = useRef<number>(currentStreak);
+  const goalHitFiredRef = useRef<boolean>(false);
 
-  // Show toast notification when error occurs
+  // Fire a streak toast when the streak actually increments, and a goal-hit
+  // toast the first time today's calories cross 90% of goal.
+  useEffect(() => {
+    const goal = state.settings.dailyCalorieGoal;
+    const consumed = state.totalCalories;
+    if (goal > 0 && consumed > 0) {
+      const ratio = consumed / goal;
+      const inWindow = ratio >= 0.9 && ratio <= 1.1;
+      if (inWindow && !goalHitFiredRef.current) {
+        goalHitFiredRef.current = true;
+        haptics.trigger('notification');
+        Toast.show({
+          type: 'success',
+          text1: '🎯 Goal hit!',
+          text2: `${Math.round(consumed)} / ${goal} cal`,
+          position: 'top',
+          visibilityTime: 2500,
+        });
+        getAllMealDates()
+          .then((dates) =>
+            checkAndUnlockAchievements({
+              mealDates: dates,
+              currentStreak,
+              calorieGoal: goal,
+              proteinGoal: state.settings.targetProtein,
+            })
+          )
+          .catch(() => {});
+      } else if (!inWindow && ratio > 1.1) {
+        // Reset if overshot so future adjustments can re-fire
+        goalHitFiredRef.current = true;
+      }
+    }
+  }, [state.totalCalories, state.settings.dailyCalorieGoal]);
+
+  // Refresh streak after a meal is added; toast if it incremented.
+  useEffect(() => {
+    if (state.meals.length === 0) return;
+    calculateAndSaveStreak()
+      .then(({ currentStreak: next }) => {
+        if (next > prevStreakRef.current && next > 0) {
+          haptics.trigger('notification');
+          Toast.show({
+            type: 'success',
+            text1: `🔥 Streak: ${next} day${next === 1 ? '' : 's'}`,
+            text2: next === 1 ? 'You just started a streak!' : 'Keep the momentum going!',
+            position: 'top',
+            visibilityTime: 2500,
+          });
+        }
+        prevStreakRef.current = next;
+      })
+      .catch(() => {});
+  }, [state.meals.length]);
+
   useEffect(() => {
     if (error) {
       Toast.show({
@@ -72,38 +157,20 @@ export default function DashboardScreen() {
     }
   }, [error, clearError]);
 
-  // Parse text into lines
-  const lines = text.split('\n');
+  const lines = useMemo(() => text.split('\n'), [text]);
 
-  // Calculate current line based on cursor position
-  const handleSelectionChange = (_event: any) => {
-    // Currently not tracking active line, but handler kept for future use
-  };
-
-  // Auto-calculate calories for a line when user stops typing
   useEffect(() => {
     lines.forEach((line, index) => {
       const trimmedLine = line.trim();
-
-      // Skip empty lines
-      if (!trimmedLine) {
+      if (!trimmedLine) return;
+      if (lineCalories[index]?.status === 'done' && lineCalories[index]?.text === trimmedLine) {
         return;
       }
-
-      // Skip if text hasn't changed and already calculated
-      if (lineCalories[index]?.status === 'done' &&
-          lineCalories[index]?.text === trimmedLine) {
-        return;
-      }
-
-      // Clear existing timer for this line
       if (debounceTimerRef.current[index]) {
         clearTimeout(debounceTimerRef.current[index]);
       }
 
-      // Start debounce timer for this line
       debounceTimerRef.current[index] = setTimeout(async () => {
-        // Start calculation - fade in "calculating..."
         setLineCalories(prev => ({
           ...prev,
           [index]: {
@@ -112,73 +179,39 @@ export default function DashboardScreen() {
             protein: 0,
             carbs: 0,
             fat: 0,
-            mealId: prev[index]?.mealId || '', // Preserve existing mealId if editing
-            status: 'calculating'
+            mealId: prev[index]?.mealId || '',
+            status: 'calculating',
           },
         }));
 
-        // Phase 1 haptic feedback
-        if (animConfig.phase1.haptic) {
-          haptics.trigger(animConfig.phase1.haptic);
-        }
-
-        // Track start time for minimum display duration
+        if (animConfig.phase1.haptic) haptics.trigger(animConfig.phase1.haptic);
         const startTime = Date.now();
 
         try {
-          // Show "sources" status after 350ms (ALWAYS HAPPENS - not cancelled)
           setTimeout(() => {
-            console.log(`[index.tsx] Line ${index}: Status → 'sources' (empty array initially)`);
             setLineCalories(prev => ({
               ...prev,
-              [index]: {
-                ...prev[index],
-                status: 'sources',
-                sources: [], // Will be updated when result arrives
-              },
+              [index]: { ...prev[index], status: 'sources', sources: [] },
             }));
-
-            // Phase 2 haptic feedback
-            if (animConfig.phase2.haptic) {
-              haptics.trigger(animConfig.phase2.haptic);
-            }
+            if (animConfig.phase2.haptic) haptics.trigger(animConfig.phase2.haptic);
           }, 350);
 
-          // Call real AI API
           const result = await analyzeNutrition(trimmedLine);
-
-          // Calculate elapsed time
           const elapsed = Date.now() - startTime;
-          
-          // Ensure sources phase shows for minimum 800ms total
-          // (350ms to reach sources + 450ms for circle animations)
           const MIN_SOURCES_DISPLAY = 800;
           const remainingTime = Math.max(0, MIN_SOURCES_DISPLAY - elapsed);
-          
-          // Wait if needed to ensure circles are visible
-          if (remainingTime > 0) {
-            await new Promise(resolve => setTimeout(resolve, remainingTime));
-          }
+          if (remainingTime > 0) await new Promise(r => setTimeout(r, remainingTime));
 
-          // Update sources data while still in sources phase
-          console.log(`[index.tsx] Line ${index}: Updating sources →`, result.sources);
           setLineCalories(prev => ({
             ...prev,
-            [index]: {
-              ...prev[index],
-              sources: result.sources,
-            },
+            [index]: { ...prev[index], sources: result.sources },
           }));
+          await new Promise(r => setTimeout(r, 100));
 
-          // Small delay to let circles fully appear with stagger
-          await new Promise(resolve => setTimeout(resolve, 100));
-
-          // Check if this line already has a meal (editing case)
           const existingMealId = lineCalories[index]?.mealId;
           let mealId: string;
 
           if (existingMealId) {
-            // Update existing meal instead of creating duplicate
             updateMeal(existingMealId, {
               text: trimmedLine,
               calories: result.calories,
@@ -191,7 +224,6 @@ export default function DashboardScreen() {
             });
             mealId = existingMealId;
           } else {
-            // Add new meal to context with AI metadata
             mealId = addMeal({
               text: trimmedLine,
               calories: result.calories,
@@ -204,7 +236,6 @@ export default function DashboardScreen() {
             });
           }
 
-          console.log(`[index.tsx] Line ${index}: Status → 'done' (${result.calories} cal)`);
           setLineCalories(prev => ({
             ...prev,
             [index]: {
@@ -218,83 +249,51 @@ export default function DashboardScreen() {
               status: 'done',
             },
           }));
-
-          // Phase 3 haptic feedback
-          if (animConfig.phase3.haptic) {
-            haptics.trigger(animConfig.phase3.haptic);
-          }
-        } catch (error: any) {
-          console.error('AI analysis error:', error);
-
-          // Calculate elapsed time for error case too
+          if (animConfig.phase3.haptic) haptics.trigger(animConfig.phase3.haptic);
+        } catch (err: any) {
+          console.error('AI analysis error:', err);
           const elapsed = Date.now() - startTime;
           const MIN_SOURCES_DISPLAY = 800;
           const remainingTime = Math.max(0, MIN_SOURCES_DISPLAY - elapsed);
-          
-          // Wait to show sources phase even on error
-          if (remainingTime > 0) {
-            await new Promise(resolve => setTimeout(resolve, remainingTime));
-          }
+          if (remainingTime > 0) await new Promise(r => setTimeout(r, remainingTime));
 
-          // Check if this line already has a meal (editing case)
           const existingMealId = lineCalories[index]?.mealId;
           let mealId: string;
-
           if (existingMealId) {
-            // Update existing meal with error
             updateMeal(existingMealId, {
               text: trimmedLine,
-              calories: 0,
-              protein: 0,
-              carbs: 0,
-              fat: 0,
-              error: error.message || 'Failed to analyze nutrition',
+              calories: 0, protein: 0, carbs: 0, fat: 0,
+              error: err.message || 'Failed to analyze nutrition',
             });
             mealId = existingMealId;
           } else {
-            // Add new meal with error
             mealId = addMeal({
               text: trimmedLine,
-              calories: 0,
-              protein: 0,
-              carbs: 0,
-              fat: 0,
-              error: error.message || 'Failed to analyze nutrition',
+              calories: 0, protein: 0, carbs: 0, fat: 0,
+              error: err.message || 'Failed to analyze nutrition',
             });
           }
-
-          // Show error state
           setLineCalories(prev => ({
             ...prev,
             [index]: {
               text: trimmedLine,
-              calories: 0,
-              protein: 0,
-              carbs: 0,
-              fat: 0,
-              mealId,
-              status: 'done',
+              calories: 0, protein: 0, carbs: 0, fat: 0,
+              mealId, status: 'done',
             },
           }));
         }
-      }, 1500); // Increased from 800ms to give users more time to type
+      }, 1500);
     });
 
     return () => {
-      Object.values(debounceTimerRef.current).forEach(timer => {
-        if (timer) clearTimeout(timer);
-      });
+      Object.values(debounceTimerRef.current).forEach(t => t && clearTimeout(t));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
-
-
   const handleCalorieTap = (lineIndex: number) => {
     const lineData = lineCalories[lineIndex];
     if (!lineData || lineData.status !== 'done' || !lineData.mealId) return;
-
-    // Use meal ID instead of text matching for reliable lookup
     const lineMeal = state.meals.find(m => m.id === lineData.mealId);
     if (lineMeal) {
       setSelectedMeal(lineMeal);
@@ -305,8 +304,6 @@ export default function DashboardScreen() {
   const handleMealUpdate = (updates: Partial<MealEntry>) => {
     if (selectedMeal) {
       updateMeal(selectedMeal.id, updates);
-
-      // Update lineCalories if needed
       const lineIndex = lines.findIndex(line => line.trim() === selectedMeal.text);
       if (lineIndex !== -1 && updates.calories !== undefined) {
         setLineCalories(prev => ({
@@ -330,14 +327,9 @@ export default function DashboardScreen() {
 
   const handleFavoriteTap = async (favorite: FavoriteMeal) => {
     try {
-      // Add meal from favorite (this handles DB operations and usage tracking)
       await addMealFromFavorite(favorite.id);
-
-      // Add favorite name to text editor for visual feedback
       const newText = text ? `${text}\n${favorite.name}` : favorite.name;
       setText(newText);
-
-      // Show success toast
       Toast.show({
         type: 'success',
         text1: 'Added from favorites',
@@ -345,19 +337,24 @@ export default function DashboardScreen() {
         position: 'top',
         visibilityTime: 2000,
       });
-
-      // Focus text input
       textInputRef.current?.focus();
-    } catch (error: any) {
+    } catch (err: any) {
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: error.message || 'Failed to add favorite meal',
+        text2: err.message || 'Failed to add favorite meal',
         position: 'top',
         visibilityTime: 3000,
       });
     }
   };
+
+  const handleSeeMeals = () => {
+    // Future: navigate to summary tab. For now, no-op (the bar still expands).
+  };
+
+  const barBottomOffset = TAB_BAR_TOTAL_HEIGHT;
+  const editorBottomPadding = barBottomOffset + CALORIE_BAR_COLLAPSED_HEIGHT + space[3];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -368,26 +365,39 @@ export default function DashboardScreen() {
         {/* Top Bar */}
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            <Text style={[styles.todayText, { color: colors.text }]}>Today</Text>
-            {isLoading && (
-              <ActivityIndicator
-                size="small"
-                color={colors.textSecondary}
-                style={styles.loadingIndicator}
-              />
-            )}
+            <View>
+              <View style={styles.todayRow}>
+                <Text style={[styles.todayText, { color: c.text.primary }]}>Today</Text>
+                {isLoading && (
+                  <ActivityIndicator
+                    size="small"
+                    color={c.text.tertiary}
+                    style={styles.loadingIndicator}
+                  />
+                )}
+              </View>
+              <Text style={[styles.dateText, { color: c.text.secondary }]}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </Text>
+            </View>
           </View>
-          <CircularSettingsButton />
+          <View style={styles.topBarRight}>
+            <StreakBadge
+              streak={currentStreak}
+              textColor={colors.textSecondary}
+              borderColor={colors.border}
+            />
+            <CircularSettingsButton />
+          </View>
         </View>
 
-        {/* Scrollable Content Area */}
+        {/* Scrollable content */}
         <ScrollView
           style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: editorBottomPadding }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Favorites Quick Access Panel */}
           <FavoritesPanel
             favorites={state.favorites}
             onFavoriteTap={handleFavoriteTap}
@@ -399,50 +409,53 @@ export default function DashboardScreen() {
             primaryColor={colors.primary}
           />
 
-          {/* Text Editor */}
+          {/* Editor with side-by-side calorie pill column */}
           <View style={styles.editorContainer}>
             <TextInput
               ref={textInputRef}
               style={[
                 styles.textEditor,
                 {
-                  backgroundColor: colors.background,
-                  color: colors.text,
+                  color: c.text.primary,
+                  paddingRight: PILL_COLUMN_WIDTH,
                 },
               ]}
               multiline
-              placeholder=""
-              placeholderTextColor={colors.placeholder}
+              placeholder="What did you eat?"
+              placeholderTextColor={c.text.tertiary}
               value={text}
               onChangeText={setText}
-              onSelectionChange={handleSelectionChange}
               autoFocus
               textAlignVertical="top"
+              scrollEnabled={false}
             />
 
-            {/* Inline Calorie Overlays */}
-            <View style={styles.calorieOverlay}>
+            {/* Pill column — flex stack of rows, each row matches LINE_HEIGHT */}
+            <View
+              style={[styles.pillColumn, { width: PILL_COLUMN_WIDTH }]}
+              pointerEvents="box-none"
+            >
               {lines.map((line, index) => {
                 const lineData = lineCalories[index];
-                if (!line.trim() || !lineData) return null;
-
+                const showPill = !!line.trim() && !!lineData;
                 return (
                   <View
                     key={index}
-                    style={[
-                      styles.calorieLineContainer,
-                      { top: index * 22 + 16 }, // 22 is line height, 16 is top padding
-                    ]}
-                    pointerEvents={lineData.status === 'done' ? 'auto' : 'none'}
+                    style={[styles.pillRow, { height: LINE_HEIGHT }]}
+                    pointerEvents={showPill && lineData?.status === 'done' ? 'auto' : 'none'}
                   >
-                    <AnimatedCalorieText
-                      status={lineData.status}
-                      calories={lineData.calories}
-                      sources={lineData.sources}
-                      textSecondaryColor={colors.textSecondary}
-                      caloriePositiveColor={colors.caloriePositive}
-                      onPress={lineData.status === 'done' ? () => handleCalorieTap(index) : undefined}
-                    />
+                    {showPill && (
+                      <View style={styles.pillInner}>
+                        <AnimatedCalorieText
+                          status={lineData!.status}
+                          calories={lineData!.calories}
+                          sources={lineData!.sources}
+                          textSecondaryColor={c.text.secondary}
+                          caloriePositiveColor={c.accent}
+                          onPress={lineData!.status === 'done' ? () => handleCalorieTap(index) : undefined}
+                        />
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -450,14 +463,27 @@ export default function DashboardScreen() {
           </View>
         </ScrollView>
 
-        {/* Bottom Calorie Progress Bar - fixed at bottom */}
-        <CalorieProgressBar
-          consumed={state.totalCalories}
-          goal={state.settings.dailyCalorieGoal}
-          onPress={() => textInputRef.current?.focus()}
-        />
+        {/* Floating bottom calorie bar — hidden while keyboard is up so the
+            user can see what they're typing. */}
+        {!keyboardVisible && (
+        <View
+          style={[styles.barWrap, { paddingBottom: barBottomOffset }]}
+          pointerEvents="box-none"
+        >
+          <CalorieProgressBar
+            consumed={state.totalCalories}
+            goal={state.settings.dailyCalorieGoal}
+            protein={state.totalProtein}
+            targetProtein={state.settings.targetProtein}
+            carbs={state.totalCarbs}
+            targetCarbs={state.settings.targetCarbs}
+            fat={state.totalFat}
+            targetFat={state.settings.targetFat}
+            onSeeMeals={handleSeeMeals}
+          />
+        </View>
+        )}
 
-        {/* Nutrition Details Modal */}
         <NutritionDetailsModal
           visible={modalVisible}
           meal={selectedMeal}
@@ -470,68 +496,79 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  keyboardView: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: space[5],
+    paddingVertical: space[4],
   },
   topBarLeft: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  todayRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+  },
+  dateText: {
+    fontSize: 14,
+    fontWeight: '400',
+    letterSpacing: -0.1,
+    marginTop: 2,
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   todayText: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    fontFamily: fonts.serif,
+    fontSize: 30,
+    fontWeight: '600',
+    letterSpacing: -0.4,
   },
-  loadingIndicator: {
-    marginLeft: 4,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: Platform.OS === 'android' ? 175 : 156, // Space for progress bar + tab bar
-  },
+  loadingIndicator: { marginLeft: 2 },
+  scrollContainer: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
   editorContainer: {
     minHeight: 400,
     position: 'relative',
-    paddingBottom: 16,
+    paddingBottom: space[4],
   },
   textEditor: {
     minHeight: 400,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: space[5],
+    paddingVertical: EDITOR_PADDING_VERTICAL,
     fontSize: 17,
     fontWeight: '400',
-    lineHeight: 22,
+    lineHeight: LINE_HEIGHT,
     letterSpacing: -0.24,
   },
-  calorieOverlay: {
+  pillColumn: {
     position: 'absolute',
-    right: 20,
-    top: 0,
-    paddingVertical: 16,
+    right: space[5],
+    top: EDITOR_PADDING_VERTICAL,
+    bottom: 0,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
   },
-  calorieLineContainer: {
-    position: 'absolute',
-    right: 0,
-    height: 22,
+  pillRow: {
     justifyContent: 'center',
+    alignItems: 'flex-end',
   },
-  calorieText: {
-    fontSize: 16,
-    fontWeight: '400',
-    letterSpacing: -0.24,
+  pillInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  barWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 });

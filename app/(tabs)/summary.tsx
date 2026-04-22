@@ -3,12 +3,14 @@
  */
 
 import React, { useEffect } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '@/hooks/useTheme';
 import { useApp } from '@/contexts/AppContext';
 import { COLORS, MACRO_EMOJIS } from '@/constants/mockData';
+import { fonts } from '@/constants/design';
 import { CircularProgress } from '@/components/CircularProgress';
 import { CircularSettingsButton } from '@/components/CircularSettingsButton';
 import { MealEntryCard } from '@/components/MealEntryCard';
@@ -79,7 +81,7 @@ export default function SummaryScreen() {
       target: state.settings.targetProtein,
       unit: 'g',
       percentage: proteinPercentage,
-      color: '#667EEA', // Purple-blue
+      color: '#6366F1',
     },
     {
       emoji: MACRO_EMOJIS.carbs,
@@ -88,7 +90,7 @@ export default function SummaryScreen() {
       target: state.settings.targetCarbs,
       unit: 'g',
       percentage: carbsPercentage,
-      color: '#5DADE2', // Light blue
+      color: '#F59E0B',
     },
     {
       emoji: MACRO_EMOJIS.fat,
@@ -97,7 +99,7 @@ export default function SummaryScreen() {
       target: state.settings.targetFat,
       unit: 'g',
       percentage: fatPercentage,
-      color: '#4A90E2', // Medium blue
+      color: '#10B981',
     },
   ];
 
@@ -132,7 +134,12 @@ export default function SummaryScreen() {
         {/* Quick Stats Dashboard */}
         <View style={styles.quickStatsContainer}>
           {/* Calories Card - Main Focus */}
-          <View style={[styles.mainStatCard, { backgroundColor: colors.primary }]}>
+          <LinearGradient
+            colors={['#2563EB', '#60A5FA']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.mainStatCard}
+          >
             <View style={styles.mainStatHeader}>
               <Text style={styles.mainStatLabel}>Calories Today</Text>
               <Text style={styles.mainStatEmoji}>🔥</Text>
@@ -153,7 +160,7 @@ export default function SummaryScreen() {
                 ]}
               />
             </View>
-          </View>
+          </LinearGradient>
 
           {/* Quick Stats Grid */}
           <View style={styles.quickStatsGrid}>
@@ -170,7 +177,7 @@ export default function SummaryScreen() {
                 <View
                   style={[
                     styles.quickStatBarFill,
-                    { backgroundColor: '#6C9BD1', width: `${Math.min((state.totalProtein / state.settings.targetProtein) * 100, 100)}%` },
+                    { backgroundColor: '#6366F1', width: `${Math.min((state.totalProtein / state.settings.targetProtein) * 100, 100)}%` },
                   ]}
                 />
               </View>
@@ -189,7 +196,7 @@ export default function SummaryScreen() {
                 <View
                   style={[
                     styles.quickStatBarFill,
-                    { backgroundColor: '#FFA07A', width: `${Math.min((state.totalCarbs / state.settings.targetCarbs) * 100, 100)}%` },
+                    { backgroundColor: '#F59E0B', width: `${Math.min((state.totalCarbs / state.settings.targetCarbs) * 100, 100)}%` },
                   ]}
                 />
               </View>
@@ -208,7 +215,7 @@ export default function SummaryScreen() {
                 <View
                   style={[
                     styles.quickStatBarFill,
-                    { backgroundColor: '#98D8AA', width: `${Math.min((state.totalFat / state.settings.targetFat) * 100, 100)}%` },
+                    { backgroundColor: '#10B981', width: `${Math.min((state.totalFat / state.settings.targetFat) * 100, 100)}%` },
                   ]}
                 />
               </View>
@@ -318,9 +325,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   header: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    fontFamily: fonts.serif,
+    fontSize: 30,
+    fontWeight: '600',
+    letterSpacing: -0.4,
   },
   loadingIndicator: {
     marginLeft: 4,
@@ -434,11 +442,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    overflow: 'hidden',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   mainStatHeader: {
     flexDirection: 'row',
@@ -456,8 +465,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
   },
   mainStatValue: {
-    fontSize: 48,
-    fontWeight: '800',
+    fontFamily: fonts.serif,
+    fontSize: 52,
+    fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: -1,
     marginBottom: 4,
@@ -502,9 +512,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quickStatValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontFamily: fonts.serif,
+    fontSize: 26,
+    fontWeight: '600',
     marginBottom: 4,
+    letterSpacing: -0.3,
   },
   quickStatLabel: {
     fontSize: 12,

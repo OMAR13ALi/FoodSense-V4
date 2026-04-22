@@ -4,35 +4,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { COLORS } from '@/constants/mockData';
-import { OnboardingData } from '@/types';
+import { useOnboarding } from '@/contexts/OnboardingContext';
 
 export default function UserInfoScreen() {
   const colorScheme = useTheme();
   const colors = COLORS[colorScheme];
   const router = useRouter();
+  const { draft, updateDraft } = useOnboarding();
 
-  const [height, setHeight] = useState('');
-  const [weight, setWeight] = useState('');
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | 'other' | null>(null);
+  const [height, setHeight] = useState(draft.height_cm ? String(draft.height_cm) : '');
+  const [weight, setWeight] = useState(draft.weight_kg ? String(draft.weight_kg) : '');
+  const [age, setAge] = useState(draft.age ? String(draft.age) : '');
+  const [gender, setGender] = useState<'male' | 'female' | 'other' | null>(
+    (draft.gender === 'male' || draft.gender === 'female' || draft.gender === 'other')
+      ? draft.gender
+      : null
+  );
 
   const handleContinue = () => {
-    // Store data in async storage or context if needed
-    const userInfo: Partial<OnboardingData> = {
-      height: height ? parseFloat(height) : undefined,
-      weight: weight ? parseFloat(weight) : undefined,
+    updateDraft({
+      height_cm: height ? parseFloat(height) : undefined,
+      weight_kg: weight ? parseFloat(weight) : undefined,
       age: age ? parseInt(age) : undefined,
       gender: gender || undefined,
-    };
-
-    // TODO: Store onboarding data in context or async storage
-    console.log('User info:', userInfo);
-
-    router.push('/onboarding/dietary-preferences');
+    });
+    router.push('/onboarding/goal-type');
   };
 
   const handleSkip = () => {
-    router.push('/onboarding/dietary-preferences');
+    router.push('/onboarding/goal-type');
   };
 
   return (

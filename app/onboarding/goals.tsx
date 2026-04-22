@@ -1,35 +1,91 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { COLORS } from '@/constants/mockData';
+import { useOnboarding } from '@/contexts/OnboardingContext';
+import {
+  calculateTDEE,
+  DEFAULT_PACE_KG_PER_WEEK,
+  PACE_OPTIONS_KG_PER_WEEK,
+} from '@/services/gamification-service';
 
 export default function GoalsScreen() {
   const colorScheme = useTheme();
   const colors = COLORS[colorScheme];
   const router = useRouter();
+  const { draft, updateDraft } = useOnboarding();
 
-  const [dailyCalories, setDailyCalories] = useState('2000');
-  const [protein, setProtein] = useState('');
-  const [carbs, setCarbs] = useState('');
-  const [fat, setFat] = useState('');
+  const goalType = draft.goal_type ?? 'maintenance';
+  const pace = draft.pace_kg_per_week ?? DEFAULT_PACE_KG_PER_WEEK;
+  const showPace = goalType === 'weight_loss' || goalType === 'weight_gain';
+
+  const suggested = useMemo(() => {
+    return calculateTDEE(
+      {
+        weight_kg: draft.weight_kg,
+        height_cm: draft.height_cm,
+        age: draft.age,
+        gender: draft.gender,
+        activity_level: draft.activity_level,
+      },
+      goalType,
+      { target_weight_kg: draft.target_weight_kg, pace_kg_per_week: pace }
+    );
+  }, [
+    draft.weight_kg,
+    draft.height_cm,
+    draft.age,
+    draft.gender,
+    draft.activity_level,
+    draft.target_weight_kg,
+    goalType,
+    pace,
+  ]);
+
+  const [dailyCalories, setDailyCalories] = useState(
+    draft.daily_calorie_goal
+      ? String(draft.daily_calorie_goal)
+      : String(suggested.recommendedCalories)
+  );
+  const manuallyEdited = useRef(Boolean(draft.daily_calorie_goal));
+  useEffect(() => {
+    if (!manuallyEdited.current) {
+      setDailyCalories(String(suggested.recommendedCalories));
+    }
+  }, [suggested.recommendedCalories]);
+
+  const handleCaloriesChange = (val: string) => {
+    manuallyEdited.current = true;
+    setDailyCalories(val);
+  };
+
+  const handlePaceChange = (next: number) => {
+    updateDraft({ pace_kg_per_week: next });
+  };
+  const [protein, setProtein] = useState(
+    draft.target_protein ? String(draft.target_protein) : ''
+  );
+  const [carbs, setCarbs] = useState(
+    draft.target_carbs ? String(draft.target_carbs) : ''
+  );
+  const [fat, setFat] = useState(draft.target_fat ? String(draft.target_fat) : '');
 
   const handleContinue = () => {
-    // Store data
-    const goalsData = {
-      dailyCalories: dailyCalories ? parseInt(dailyCalories) : 2000,
-      protein: protein ? parseInt(protein) : undefined,
-      carbs: carbs ? parseInt(carbs) : undefined,
-      fat: fat ? parseInt(fat) : undefined,
-    };
-
-    console.log('Goals:', goalsData);
-
+    updateDraft({
+      daily_calorie_goal: dailyCalories ? parseInt(dailyCalories) : suggested.recommendedCalories,
+      target_protein: protein ? parseInt(protein) : undefined,
+      target_carbs: carbs ? parseInt(carbs) : undefined,
+      target_fat: fat ? parseInt(fat) : undefined,
+    });
     router.push('/onboarding/completion');
   };
 
   const handleSkip = () => {
+    updateDraft({
+      daily_calorie_goal: suggested.recommendedCalories,
+    });
     router.push('/onboarding/completion');
   };
 
@@ -51,6 +107,49 @@ export default function GoalsScreen() {
 
         {/* Input Fields */}
         <View style={styles.form}>
+          {showPace && (
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: colors.text }]}>
+                Weekly pace
+              </Text>
+              <View style={styles.paceRow}>
+                {PACE_OPTIONS_KG_PER_WEEK.map((opt) => {
+                  const selected = Math.abs(pace - opt) < 0.001;
+                  return (
+                    <Pressable
+                      key={opt}
+                      onPress={() => handlePaceChange(opt)}
+                      style={({ pressed }) => [
+                        styles.paceChip,
+                        {
+                          borderColor: selected ? colors.caloriePositive : colors.border,
+                          backgroundColor: selected
+                            ? colors.caloriePositive + '1A'
+                            : colors.cardBackground,
+                          opacity: pressed ? 0.7 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.paceChipText,
+                          { color: selected ? colors.caloriePositive : colors.text },
+                        ]}
+                      >
+                        {opt} kg/wk
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {suggested.weeksToGoal !== null && (
+                <Text style={[styles.hint, { color: colors.textSecondary }]}>
+                  ≈ {suggested.weeksToGoal} weeks to reach {draft.target_weight_kg} kg
+                </Text>
+              )}
+            </View>
+          )}
+
           {/* Daily Calories */}
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.text }]}>Daily Calorie Goal</Text>
@@ -67,13 +166,13 @@ export default function GoalsScreen() {
                 placeholder="2000"
                 placeholderTextColor={colors.placeholder}
                 value={dailyCalories}
-                onChangeText={setDailyCalories}
+                onChangeText={handleCaloriesChange}
                 keyboardType="numeric"
               />
               <Text style={[styles.unit, { color: colors.textSecondary }]}>cal</Text>
             </View>
             <Text style={[styles.hint, { color: colors.textSecondary }]}>
-              Recommended: 1800-2400 calories per day
+              Suggested for your goal: {suggested.recommendedCalories} cal/day
             </Text>
           </View>
 
@@ -251,6 +350,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '400',
     letterSpacing: -0.1,
+  },
+  paceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  paceChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  paceChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
   macrosSection: {
     gap: 12,

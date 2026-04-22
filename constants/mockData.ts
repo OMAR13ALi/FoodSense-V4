@@ -59,48 +59,36 @@ export const MACRO_EMOJIS = {
 // Loading state emojis for search animation
 export const LOADING_EMOJIS = ['🔍', '🤔', '💭', '🧠', '✨'];
 
-// Color palette - Blue gradient modern design
+// Color palette — sourced from design tokens (`constants/design.ts`).
+// Shape preserved for backwards compatibility with existing call sites.
+import { designColors } from './design';
+
+const buildColors = (mode: 'light' | 'dark') => {
+  const c = designColors[mode];
+  return {
+    background: c.bg.canvas,
+    cardBackground: c.bg.surface,
+    primary: c.accent,
+    primaryStart: c.accent,
+    primaryEnd: c.accentDeep,
+    accentStart: mode === 'light' ? '#60A5FA' : '#93C5FD',
+    accentEnd: c.accent,
+    secondary: c.accentTint,
+    text: c.text.primary,
+    textSecondary: c.text.secondary,
+    border: c.hairline,
+    success: c.success,
+    warning: c.warning,
+    error: c.error,
+    caloriePositive: c.accent,
+    progressGradientStart: '#2563EB',
+    progressGradientEnd: '#60A5FA',
+    shadow: c.shadow,
+    placeholder: c.placeholder,
+  };
+};
+
 export const COLORS = {
-  light: {
-    background: '#F7FAFC',        // Very light blue-gray
-    cardBackground: '#FFFFFF',     // Pure white cards
-    primary: '#4A90E2',           // Main blue
-    primaryStart: '#4A90E2',      // Medium blue (gradient start)
-    primaryEnd: '#357ABD',        // Deeper blue (gradient end)
-    accentStart: '#5DADE2',       // Light cyan-blue (gradient start)
-    accentEnd: '#3498DB',         // Bright blue (gradient end)
-    secondary: '#EBF5FB',         // Very light blue tint
-    text: '#1C1C1E',              // Apple dark gray
-    textSecondary: '#8E8E93',     // Apple medium gray
-    border: '#E5E5EA',            // Apple light gray
-    success: '#34C759',           // Apple green
-    warning: '#FF9500',           // Apple orange
-    error: '#FF3B30',             // Apple red
-    caloriePositive: '#5DADE2',   // Light blue for calories
-    progressGradientStart: '#667EEA', // Purple-blue
-    progressGradientEnd: '#764BA2',   // Deep purple
-    shadow: 'rgba(74, 144, 226, 0.08)', // Blue-tinted shadow
-    placeholder: '#C7C7CC',       // Apple placeholder gray
-  },
-  dark: {
-    background: '#000000',        // True black (Apple style)
-    cardBackground: '#1C1C1E',    // Dark gray cards
-    primary: '#5DADE2',           // Light blue
-    primaryStart: '#5DADE2',      // Light cyan-blue (gradient start)
-    primaryEnd: '#4A90E2',        // Medium blue (gradient end)
-    accentStart: '#3498DB',       // Bright blue (gradient start)
-    accentEnd: '#2E7BB7',         // Darker blue (gradient end)
-    secondary: '#1A2332',         // Dark blue-gray
-    text: '#FFFFFF',              // White text
-    textSecondary: '#98989D',     // Medium gray
-    border: '#38383A',            // Dark border
-    success: '#30D158',           // Apple green (dark)
-    warning: '#FF9F0A',           // Apple orange (dark)
-    error: '#FF453A',             // Apple red (dark)
-    caloriePositive: '#5DADE2',   // Light blue for calories
-    progressGradientStart: '#667EEA',
-    progressGradientEnd: '#764BA2',
-    shadow: 'rgba(93, 173, 226, 0.15)', // Blue-tinted shadow
-    placeholder: '#48484A',       // Dark placeholder
-  },
+  light: buildColors('light'),
+  dark: buildColors('dark'),
 };

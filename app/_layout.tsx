@@ -10,6 +10,7 @@ import { ActivityIndicator, View, Text } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppProvider } from '@/contexts/AppContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { OnboardingProvider } from '@/contexts/OnboardingContext';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -91,11 +92,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <AppProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <RootLayoutNav />
-            <StatusBar style="auto" />
-            <Toast />
-          </ThemeProvider>
+          <OnboardingProvider>
+            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <RootLayoutNav />
+              <StatusBar style="auto" />
+              <Toast />
+            </ThemeProvider>
+          </OnboardingProvider>
         </AppProvider>
       </AuthProvider>
     </GestureHandlerRootView>

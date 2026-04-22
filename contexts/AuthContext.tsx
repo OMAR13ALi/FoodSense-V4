@@ -31,12 +31,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         const { user: currentUser, error } = await authService.getCurrentUser();
         if (error) {
-          console.error('Auth state change error:', error);
-          // If profile is missing, getCurrentUser will try to create it
-          // If it still fails, log the error but set user anyway for debugging
-          if (error.code === 'PROFILE_MISSING') {
-            console.error('Profile missing during auth state change');
+          const isStaleJWT = error.code === '403' || error.message?.includes('does not exist');
+          if (isStaleJWT) {
+            await authService.signOut();
+            setUser(null);
+            return;
           }
+          console.error('Auth state change error:', error);
         }
         setUser(currentUser);
       } else {
@@ -57,14 +58,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         // "Auth session missing" is normal on first app launch - don't log as error
         const isNoSession = error.code === '400' || error.message?.includes('Auth session missing');
+        // Stale JWT (e.g. after db reset in local dev) — clear it and treat as logged out
+        const isStaleJWT = error.code === '403' || error.message?.includes('does not exist');
+
+        if (isStaleJWT) {
+          await authService.signOut();
+          setUser(null);
+          return;
+        }
 
         if (!isNoSession) {
-          // Only log actual errors (not the expected "no session" case)
           console.error('Failed to initialize auth:', error);
         }
 
-        // Even if there's an error, we might have a user (with profile issues)
-        // Set the user so the app can handle the error state appropriately
         setUser(currentUser);
       } else {
         setUser(currentUser);
