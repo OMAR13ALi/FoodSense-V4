@@ -8,13 +8,10 @@ yarn-error.log*
 null
 nul
 
-# Environment variables
+# Environment variables - never commit any env files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env*.local
+.env.*
+!.env.example
 
 # Expo
 .expo/
@@ -42,9 +39,6 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
-
-# local env files
-.env*.local
 
 # typescript
 *.tsbuildinfo

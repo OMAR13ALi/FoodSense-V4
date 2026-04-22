@@ -10,6 +10,7 @@ export default function OnboardingLayout() {
     >
       <Stack.Screen name="welcome" />
       <Stack.Screen name="user-info" />
+      <Stack.Screen name="goal-type" />
       <Stack.Screen name="dietary-preferences" />
       <Stack.Screen name="goals" />
       <Stack.Screen name="completion" />

@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabase-client';
-import { UserProfile } from '../types';
+import { UserProfile, GoalType } from '../types';
 
 /**
  * Get current user's profile
@@ -123,6 +123,30 @@ export async function updatePrivacySettings(data: {
   analytics_enabled?: boolean;
 }): Promise<void> {
   return updateUserProfile(data);
+}
+
+/**
+ * Update goal type and optional target weight
+ */
+export async function updateGoalType(
+  goalType: GoalType,
+  targetWeightKg?: number
+): Promise<void> {
+  const updates: Partial<UserProfile> = { goal_type: goalType };
+  if (targetWeightKg !== undefined) {
+    updates.target_weight_kg = targetWeightKg;
+  }
+  return updateUserProfile(updates);
+}
+
+/**
+ * Save computed streak values back to the profile row
+ */
+export async function updateStreakInProfile(
+  currentStreak: number,
+  bestStreak: number
+): Promise<void> {
+  return updateUserProfile({ current_streak: currentStreak, best_streak: bestStreak } as any);
 }
 
 /**

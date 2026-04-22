@@ -293,6 +293,49 @@ export interface Database {
           updated_at?: string;
         };
       };
+      weight_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          weight_kg: number;
+          logged_at: string; // YYYY-MM-DD
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          weight_kg: number;
+          logged_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          weight_kg?: number;
+          logged_at?: string;
+          created_at?: string;
+        };
+      };
+      user_achievements: {
+        Row: {
+          id: string;
+          user_id: string;
+          achievement_id: string;
+          unlocked_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          achievement_id: string;
+          unlocked_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          achievement_id?: string;
+          unlocked_at?: string;
+        };
+      };
     };
   };
 }

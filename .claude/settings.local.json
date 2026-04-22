@@ -19,7 +19,22 @@
       "Bash(findstr:*)",
       "Bash(test:*)",
       "mcp__ide__getDiagnostics",
-      "WebFetch(domain:www.canva.com)"
+      "WebFetch(domain:www.canva.com)",
+      "Bash(cat app.json)",
+      "Bash(cat app.config.js)",
+      "Bash(eas --version)",
+      "Bash(eas secret:list)",
+      "Bash(supabase --version)",
+      "Bash(docker --version)",
+      "Bash(npx supabase:*)",
+      "Bash(npx expo:*)",
+      "Bash(find C:\\\\\\\\Users\\\\\\\\omar\\\\\\\\Desktop\\\\\\\\calorie-app/components -maxdepth 1 -type f -name \"*.tsx\")",
+      "Bash(xargs grep *)",
+      "Bash(npm run *)",
+      "Bash(ipconfig)",
+      "Bash(grep -E \"\\(package\\\\.json|app\\\\.config|env\\\\.ts|\\\\.ts$|\\\\.tsx$\\)\")",
+      "Bash(git stash *)",
+      "Bash(npx eslint *)"
     ],
     "deny": [],
     "ask": []
