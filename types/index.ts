@@ -281,3 +281,65 @@ export interface FavoriteMeal {
   created_at: string;
   updated_at: string;
 }
+
+// ============================================
+// RECOMMENDATION TYPES
+// ============================================
+
+export interface RecommendationPacing {
+  on_track: boolean;
+  message: string;
+  suggested_daily_calories?: number;
+  weeks_to_goal?: number;
+}
+
+export interface RecommendationMealSuggestion {
+  name: string;
+  reason: string;
+  calories: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+}
+
+export interface RecommendationTip {
+  title: string;
+  message: string;
+}
+
+export interface DailyRecommendation {
+  id: string;
+  date: string; // YYYY-MM-DD
+  pacing: RecommendationPacing;
+  meal_suggestions: RecommendationMealSuggestion[];
+  tips: RecommendationTip[];
+  generated_at: string;
+}
+
+export interface RecommendationContext {
+  goal_type: GoalType;
+  target_weight_kg?: number;
+  pace_kg_per_week?: number;
+  current_weight_kg?: number;
+  daily_calorie_goal: number;
+  target_protein: number;
+  target_carbs: number;
+  target_fat: number;
+  activity_level?: string;
+  dietary_preference?: string;
+  allergies?: string[];
+  today: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    meals_count: number;
+  };
+  seven_day_avg: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  recent_weight_trend_kg_per_week?: number;
+}

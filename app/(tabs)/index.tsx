@@ -29,6 +29,7 @@ import { CircularSettingsButton } from '@/components/CircularSettingsButton';
 import { NutritionDetailsModal } from '@/components/NutritionDetailsModal';
 import { AnimatedCalorieText } from '@/components/AnimatedCalorieText';
 import { FavoritesPanel } from '@/components/FavoritesPanel';
+import { RecommendationCard } from '@/components/RecommendationCard';
 import { StreakBadge } from '@/components/StreakBadge';
 import { MealEntry, CalorieAnimationStatus, FavoriteMeal } from '@/types';
 import { analyzeNutrition } from '@/services/ai-service';
@@ -407,6 +408,15 @@ export default function DashboardScreen() {
             backgroundColor={colors.background}
             surfaceColor={colors.cardBackground}
             primaryColor={colors.primary}
+          />
+
+          <RecommendationCard
+            textColor={colors.text}
+            textSecondaryColor={colors.textSecondary}
+            surfaceColor={colors.cardBackground}
+            primaryColor={colors.primary}
+            accentStart={colors.accentStart}
+            accentEnd={colors.accentEnd}
           />
 
           {/* Editor with side-by-side calorie pill column */}
