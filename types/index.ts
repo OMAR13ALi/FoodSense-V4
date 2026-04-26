@@ -17,6 +17,11 @@ export interface MealEntry {
   confidence?: number; // 0-1 confidence score from AI
   sources?: string[]; // Data sources used by AI
   error?: string; // Error message if AI analysis failed
+  // Portion-aware linkage (Phase 2)
+  foodId?: string;
+  quantity?: number;
+  unit?: string;
+  servingSizeG?: number;
 }
 
 // User settings interface
@@ -83,6 +88,56 @@ export interface APIError {
   message: string;
   code?: string;
   retryable: boolean;
+}
+
+// ============================================
+// PORTION / FOOD TYPES (Phase 1)
+// ============================================
+
+export type PortionUnit =
+  | 'g' | 'kg' | 'mg'
+  | 'ml' | 'l'
+  | 'oz' | 'lb'
+  | 'serving' | 'piece' | 'slice'
+  | 'cup' | 'tbsp' | 'tsp'
+  | 'can' | 'bottle';
+
+export interface ParsedPortion {
+  quantity: number;
+  unit: PortionUnit;
+  foodText: string;
+}
+
+export interface Food {
+  id?: string; // present when sourced from Supabase `foods`
+  canonicalName: string;
+  displayName: string;
+  per100g: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  defaultServingG: number;
+  defaultServingUnit: PortionUnit;
+  densityGPerMl?: number;
+  region?: string;
+  confidence: number;
+  sources: string[];
+  provider?: 'perplexity' | 'openrouter' | 'seed' | 'static-cache';
+  explanation?: string;
+}
+
+export interface ResolvedMeal {
+  parsed: ParsedPortion;
+  food: Food;
+  nutrition: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    grams: number;
+  };
 }
 
 // Calorie Animation Status Type
@@ -280,4 +335,66 @@ export interface FavoriteMeal {
   last_used_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+// ============================================
+// RECOMMENDATION TYPES
+// ============================================
+
+export interface RecommendationPacing {
+  on_track: boolean;
+  message: string;
+  suggested_daily_calories?: number;
+  weeks_to_goal?: number;
+}
+
+export interface RecommendationMealSuggestion {
+  name: string;
+  reason: string;
+  calories: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+}
+
+export interface RecommendationTip {
+  title: string;
+  message: string;
+}
+
+export interface DailyRecommendation {
+  id: string;
+  date: string; // YYYY-MM-DD
+  pacing: RecommendationPacing;
+  meal_suggestions: RecommendationMealSuggestion[];
+  tips: RecommendationTip[];
+  generated_at: string;
+}
+
+export interface RecommendationContext {
+  goal_type: GoalType;
+  target_weight_kg?: number;
+  pace_kg_per_week?: number;
+  current_weight_kg?: number;
+  daily_calorie_goal: number;
+  target_protein: number;
+  target_carbs: number;
+  target_fat: number;
+  activity_level?: string;
+  dietary_preference?: string;
+  allergies?: string[];
+  today: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    meals_count: number;
+  };
+  seven_day_avg: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  recent_weight_trend_kg_per_week?: number;
 }

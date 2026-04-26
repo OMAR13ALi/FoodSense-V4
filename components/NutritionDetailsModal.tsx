@@ -20,6 +20,8 @@ import { MealEntry } from '@/types';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SourceIcons } from '@/components/SourceIcon';
 import { useApp } from '@/contexts/AppContext';
+import { upsertUserFoodOverride } from '@/services/database-service';
+import { clearAllCaches } from '@/services/food-cache';
 
 interface NutritionDetailsModalProps {
   visible: boolean;
@@ -57,15 +59,38 @@ export const NutritionDetailsModal: React.FC<NutritionDetailsModalProps> = ({
     setEditedFat((meal.fat || 0).toString());
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    const newCalories = parseInt(editedCalories, 10) || meal.calories;
+    const newProtein = parseInt(editedProtein, 10) || meal.protein || 0;
+    const newCarbs = parseInt(editedCarbs, 10) || meal.carbs || 0;
+    const newFat = parseInt(editedFat, 10) || meal.fat || 0;
+
     if (onUpdate) {
       onUpdate({
-        calories: parseInt(editedCalories, 10) || meal.calories,
-        protein: parseInt(editedProtein, 10) || meal.protein,
-        carbs: parseInt(editedCarbs, 10) || meal.carbs,
-        fat: parseInt(editedFat, 10) || meal.fat,
+        calories: newCalories,
+        protein: newProtein,
+        carbs: newCarbs,
+        fat: newFat,
       });
     }
+
+    // Phase 3: persist a per-user override on the underlying food so every
+    // future meal using it (for this user) reflects the correction.
+    if (meal.foodId && meal.servingSizeG && meal.servingSizeG > 0) {
+      const scale = 100 / meal.servingSizeG;
+      try {
+        await upsertUserFoodOverride(meal.foodId, {
+          per100gCalories: newCalories * scale,
+          per100gProtein: newProtein * scale,
+          per100gCarbs: newCarbs * scale,
+          per100gFat: newFat * scale,
+        });
+        await clearAllCaches();
+      } catch (err: any) {
+        Alert.alert('Override not saved', err.message || 'Could not persist correction');
+      }
+    }
+
     setIsEditing(false);
     onClose();
   };
@@ -140,6 +165,14 @@ export const NutritionDetailsModal: React.FC<NutritionDetailsModalProps> = ({
             <Text style={[styles.mealName, { color: '#000000' }]}>
               {meal.text}
             </Text>
+
+            {/* Portion breakdown */}
+            {meal.quantity != null && meal.unit && meal.servingSizeG != null && (
+              <Text style={{ fontSize: 13, color: '#666666', marginTop: -12, marginBottom: 16 }}>
+                {meal.quantity} {meal.unit}{meal.quantity === 1 ? '' : 's'} · {Math.round(meal.servingSizeG)}g
+                {meal.confidence != null && meal.confidence < 0.7 ? '  ⚠️ low confidence' : ''}
+              </Text>
+            )}
 
             {/* Calories */}
             <View style={styles.caloriesContainer}>

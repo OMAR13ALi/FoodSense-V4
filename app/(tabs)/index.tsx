@@ -29,10 +29,12 @@ import { CircularSettingsButton } from '@/components/CircularSettingsButton';
 import { NutritionDetailsModal } from '@/components/NutritionDetailsModal';
 import { AnimatedCalorieText } from '@/components/AnimatedCalorieText';
 import { FavoritesPanel } from '@/components/FavoritesPanel';
+import { RecommendationCard } from '@/components/RecommendationCard';
 import { StreakBadge } from '@/components/StreakBadge';
 import { MealEntry, CalorieAnimationStatus, FavoriteMeal } from '@/types';
-import { analyzeNutrition } from '@/services/ai-service';
-import { checkAndUnlockAchievements, calculateAndSaveStreak, getAllMealDates } from '@/services/gamification-service';
+import { resolveMeal } from '@/services/meal-resolver';
+import { checkAndUnlockAchievements, calculateAndSaveStreak } from '@/services/gamification-service';
+import { getAllMealDates } from '@/services/database-service';
 import { getAnimationConfig } from '@/utils/animationConfigs';
 import { useStreakData } from '@/hooks/useStreakData';
 
@@ -196,43 +198,61 @@ export default function DashboardScreen() {
             if (animConfig.phase2.haptic) haptics.trigger(animConfig.phase2.haptic);
           }, 350);
 
-          const result = await analyzeNutrition(trimmedLine);
+          const resolved = await resolveMeal(trimmedLine);
           const elapsed = Date.now() - startTime;
           const MIN_SOURCES_DISPLAY = 800;
           const remainingTime = Math.max(0, MIN_SOURCES_DISPLAY - elapsed);
           if (remainingTime > 0) await new Promise(r => setTimeout(r, remainingTime));
 
+          const { food, nutrition, parsed } = resolved;
+          const calories = Math.round(nutrition.calories);
+          const protein = Math.round(nutrition.protein);
+          const carbs = Math.round(nutrition.carbs);
+          const fat = Math.round(nutrition.fat);
+          const explanation = food.explanation?.trim()
+            ? food.explanation.trim()
+            : `${food.displayName}.`;
+
           setLineCalories(prev => ({
             ...prev,
-            [index]: { ...prev[index], sources: result.sources },
+            [index]: { ...prev[index], sources: food.sources },
           }));
           await new Promise(r => setTimeout(r, 100));
 
           const existingMealId = lineCalories[index]?.mealId;
           let mealId: string;
 
+          const portionFields = {
+            foodId: food.id,
+            quantity: parsed.quantity,
+            unit: parsed.unit,
+            servingSizeG: nutrition.grams,
+          };
+
           if (existingMealId) {
             updateMeal(existingMealId, {
               text: trimmedLine,
-              calories: result.calories,
-              protein: result.protein,
-              carbs: result.carbs,
-              fat: result.fat,
-              aiExplanation: result.explanation,
-              confidence: result.confidence,
-              sources: result.sources,
+              calories,
+              protein,
+              carbs,
+              fat,
+              aiExplanation: explanation,
+              confidence: food.confidence,
+              sources: food.sources,
+              ...portionFields,
             });
             mealId = existingMealId;
           } else {
             mealId = addMeal({
               text: trimmedLine,
-              calories: result.calories,
-              protein: result.protein,
-              carbs: result.carbs,
-              fat: result.fat,
-              aiExplanation: result.explanation,
-              confidence: result.confidence,
-              sources: result.sources,
+              calories,
+              protein,
+              carbs,
+              fat,
+              aiExplanation: explanation,
+              confidence: food.confidence,
+              sources: food.sources,
+              ...portionFields,
             });
           }
 
@@ -240,12 +260,12 @@ export default function DashboardScreen() {
             ...prev,
             [index]: {
               text: trimmedLine,
-              calories: result.calories,
-              protein: result.protein,
-              carbs: result.carbs,
-              fat: result.fat,
+              calories,
+              protein,
+              carbs,
+              fat,
               mealId,
-              sources: result.sources,
+              sources: food.sources,
               status: 'done',
             },
           }));
@@ -407,6 +427,15 @@ export default function DashboardScreen() {
             backgroundColor={colors.background}
             surfaceColor={colors.cardBackground}
             primaryColor={colors.primary}
+          />
+
+          <RecommendationCard
+            textColor={colors.text}
+            textSecondaryColor={colors.textSecondary}
+            surfaceColor={colors.cardBackground}
+            primaryColor={colors.primary}
+            accentStart={colors.accentStart}
+            accentEnd={colors.accentEnd}
           />
 
           {/* Editor with side-by-side calorie pill column */}

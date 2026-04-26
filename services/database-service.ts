@@ -1,5 +1,135 @@
-import { MealEntry, UserSettings } from '../types';
+import { MealEntry, UserSettings, Food, PortionUnit } from '../types';
 import { supabase, Database } from './supabase-client';
+
+// =====================================================
+// FOODS OPERATIONS (Phase 2)
+// =====================================================
+
+interface DbFoodRow {
+  id: string;
+  canonical_name: string;
+  display_name: string;
+  per_100g_calories: number | string;
+  per_100g_protein: number | string;
+  per_100g_carbs: number | string;
+  per_100g_fat: number | string;
+  default_serving_g: number | string;
+  default_serving_unit: string;
+  density_g_per_ml: number | string | null;
+  region: string | null;
+  confidence: number | string | null;
+  sources: string[] | null;
+  provider: string | null;
+  description: string | null;
+}
+
+function dbFoodToFood(row: DbFoodRow): Food {
+  return {
+    canonicalName: row.canonical_name,
+    displayName: row.display_name,
+    per100g: {
+      calories: Number(row.per_100g_calories),
+      protein: Number(row.per_100g_protein),
+      carbs: Number(row.per_100g_carbs),
+      fat: Number(row.per_100g_fat),
+    },
+    defaultServingG: Number(row.default_serving_g),
+    defaultServingUnit: row.default_serving_unit as PortionUnit,
+    densityGPerMl: row.density_g_per_ml != null ? Number(row.density_g_per_ml) : undefined,
+    region: row.region ?? undefined,
+    confidence: row.confidence != null ? Number(row.confidence) : 0.8,
+    sources: row.sources ?? [],
+    provider: (row.provider as Food['provider']) ?? undefined,
+    explanation: row.description ?? undefined,
+  };
+}
+
+interface DbFoodOverride {
+  per_100g_calories: number | string | null;
+  per_100g_protein: number | string | null;
+  per_100g_carbs: number | string | null;
+  per_100g_fat: number | string | null;
+  default_serving_g: number | string | null;
+}
+
+function applyOverride(food: Food, override: DbFoodOverride): Food {
+  return {
+    ...food,
+    per100g: {
+      calories: override.per_100g_calories != null ? Number(override.per_100g_calories) : food.per100g.calories,
+      protein:  override.per_100g_protein  != null ? Number(override.per_100g_protein)  : food.per100g.protein,
+      carbs:    override.per_100g_carbs    != null ? Number(override.per_100g_carbs)    : food.per100g.carbs,
+      fat:      override.per_100g_fat      != null ? Number(override.per_100g_fat)      : food.per100g.fat,
+    },
+    defaultServingG: override.default_serving_g != null ? Number(override.default_serving_g) : food.defaultServingG,
+  };
+}
+
+export async function upsertUserFoodOverride(
+  foodId: string,
+  override: {
+    per100gCalories?: number;
+    per100gProtein?: number;
+    per100gCarbs?: number;
+    per100gFat?: number;
+    defaultServingG?: number;
+  },
+): Promise<void> {
+  const userId = await getCurrentUserId();
+  const { error } = await supabase
+    .from('user_food_overrides')
+    .upsert({
+      user_id: userId,
+      food_id: foodId,
+      per_100g_calories: override.per100gCalories ?? null,
+      per_100g_protein: override.per100gProtein ?? null,
+      per_100g_carbs: override.per100gCarbs ?? null,
+      per_100g_fat: override.per100gFat ?? null,
+      default_serving_g: override.defaultServingG ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,food_id' });
+  if (error) throw error;
+}
+
+export async function lookupFoodByAlias(canonicalKey: string): Promise<Food | null> {
+  const normalized = canonicalKey.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const { data: aliasRow } = await supabase
+    .from('food_aliases')
+    .select('food_id')
+    .eq('alias', normalized)
+    .maybeSingle();
+
+  let foodRow: DbFoodRow | null = null;
+  if (aliasRow?.food_id) {
+    const { data } = await supabase.from('foods').select('*').eq('id', aliasRow.food_id).maybeSingle();
+    foodRow = (data as unknown as DbFoodRow) ?? null;
+  } else {
+    const { data } = await supabase.from('foods').select('*').eq('canonical_name', normalized).maybeSingle();
+    foodRow = (data as unknown as DbFoodRow) ?? null;
+  }
+  if (!foodRow) return null;
+
+  let food: Food = { ...dbFoodToFood(foodRow), id: foodRow.id };
+
+  try {
+    const userId = await getCurrentUserId();
+    const { data: override } = await supabase
+      .from('user_food_overrides')
+      .select('per_100g_calories, per_100g_protein, per_100g_carbs, per_100g_fat, default_serving_g')
+      .eq('user_id', userId)
+      .eq('food_id', foodRow.id)
+      .maybeSingle();
+    if (override) {
+      food = applyOverride(food, override as DbFoodOverride);
+    }
+  } catch {
+    // unauthenticated read → no overrides applied
+  }
+
+  return food;
+}
 
 /**
  * Database Service
@@ -52,6 +182,10 @@ function mealToDbFormat(meal: MealEntry, userId: string) {
     ai_explanation: meal.aiExplanation ?? null,
     confidence: meal.confidence ?? null,
     sources: meal.sources ?? null,
+    food_id: meal.foodId ?? null,
+    quantity: meal.quantity ?? null,
+    unit: meal.unit ?? null,
+    serving_size_g: meal.servingSizeG ?? null,
   };
 }
 
@@ -59,6 +193,7 @@ function mealToDbFormat(meal: MealEntry, userId: string) {
  * Convert meal from database format to app format
  */
 function mealFromDbFormat(dbMeal: DbMeal): MealEntry {
+  const anyMeal = dbMeal as any;
   return {
     id: dbMeal.id,
     text: dbMeal.text,
@@ -70,6 +205,10 @@ function mealFromDbFormat(dbMeal: DbMeal): MealEntry {
     aiExplanation: dbMeal.ai_explanation ?? undefined,
     confidence: dbMeal.confidence ? Number(dbMeal.confidence) : undefined,
     sources: dbMeal.sources ?? undefined,
+    foodId: anyMeal.food_id ?? undefined,
+    quantity: anyMeal.quantity != null ? Number(anyMeal.quantity) : undefined,
+    unit: anyMeal.unit ?? undefined,
+    servingSizeG: anyMeal.serving_size_g != null ? Number(anyMeal.serving_size_g) : undefined,
   };
 }
 
@@ -585,7 +724,7 @@ export async function importAllData(jsonData: string): Promise<void> {
 
       // Group meals by date and save
       const mealsByDate = new Map<string, MealEntry[]>();
-      meals.forEach((meal) => {
+      meals.forEach((meal: any) => {
         const dateKey = formatDateKey(meal.timestamp);
         if (!mealsByDate.has(dateKey)) {
           mealsByDate.set(dateKey, []);
